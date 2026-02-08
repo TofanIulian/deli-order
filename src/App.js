@@ -31,8 +31,18 @@ import {
   Checkbox,
   Chip,
   Grid,
-  Paper
+  Paper,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  ToggleButton,
+  ToggleButtonGroup,
+  CardActionArea
+
 } from "@mui/material";
+import { Snackbar, Alert } from "@mui/material";
+
 
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import HourglassTopIcon from "@mui/icons-material/HourglassTop";
@@ -41,7 +51,7 @@ import FiberNewIcon from "@mui/icons-material/FiberNew";
 const PREP_BUFFER_MIN = 10;
 
 const SLOT_MINUTES = 15; // din 15 in 15 minute
-const WINDOW_HOURS = 4; // arata sloturi pe 4 ore in fata
+const WINDOW_HOURS = 2; // arata sloturi pe 2 ore in fata
 const SLOT_LIMIT = 3; // limita comenzi pe slot
 
 const STAFF_PIN = "1234";
@@ -95,6 +105,11 @@ function App() {
   const [pickupSlot, setPickupSlot] = useState(null);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderCode, setOrderCode] = useState("");
+  const [snack, setSnack] = useState({ open: false, msg: "" });
+  const [configOpen, setConfigOpen] = useState(false);
+  const [configProduct, setConfigProduct] = useState(null);
+  const [selectedSalads, setSelectedSalads] = useState([]);
+  const [customSelections, setCustomSelections] = useState({});
 
   // -------- Firestore state --------
   const [orders, setOrders] = useState([]);
@@ -165,6 +180,8 @@ function App() {
     setOrderPlaced(false);
     setOrderCode("");
     setCart((prev) => [...prev, productOrItem]);
+    setSnack({ open: true, msg: "Added to cart" });
+
   }
 
   function removeFromCart(indexToRemove) {
@@ -204,6 +221,23 @@ function App() {
 
   const total = cart.reduce((sum, item) => sum + Number(item.price || 0), 0);
   const canPlaceOrder = cart.length > 0 && pickupSlot !== null;
+
+const cfgOpts = configProduct?.config?.options || [];
+
+const missingRequired = cfgOpts.some((o) => {
+  if (!o.required) return false;
+  const v = customSelections[o.key];
+  return o.type === "multi"
+    ? !(Array.isArray(v) && v.length > 0)
+    : !v;
+});
+
+const saladsEnabled = !!configProduct?.config?.salads?.enabled;
+const saladsIncluded = Number(configProduct?.config?.salads?.included || 0);
+const saladsOk = !saladsEnabled || selectedSalads.length >= saladsIncluded;
+
+const disableAddToCart = !configProduct || missingRequired || !saladsOk;
+
 
   async function placeOrder() {
     const code = generateOrderCode();
@@ -298,7 +332,18 @@ function App() {
 
   // -------- Configurator helpers --------
  
+function openConfigurator(product) {
+  setConfigProduct(product);
+  setSelectedSalads([]);
+  setCustomSelections({});
+  setConfigOpen(true);
+}
 
+function toggleSalad(name) {
+  setSelectedSalads((prev) =>
+    prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]
+  );
+}
 
 
   
@@ -375,7 +420,8 @@ function App() {
         {/* CLIENT UI */}
         {!isStaff && (
           <>
-           <Grid container spacing={2}>
+           <Container maxWidth="lg" sx={{ py: 3 }}>
+  <Grid container spacing={2.5} alignItems="flex-start">
   {/* LEFT: Menu */}
   <Grid item xs={12} md={7}>
     <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>
@@ -391,44 +437,63 @@ function App() {
         .filter((p) => p.active !== false)
         .map((product) => (
           <Grid item xs={12} sm={6} key={product.id}>
-            <Card sx={{ borderRadius: 3 }} variant="outlined">
-              <CardContent>
-                <Stack
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="flex-start"
-                  spacing={2}
-                >
-                  <Box>
-                    <Typography
-                      variant="h6"
-                      sx={{ fontWeight: 800, lineHeight: 1.2 }}
-                    >
-                      {product.name}
-                    </Typography>
+            <Card variant="outlined" sx={{ borderRadius: 3, height: "100%" }}>
+  <CardActionArea
+    onClick={() => {
+      const isConfigurable =
+        !!product?.config &&
+        (product.config?.salads?.enabled || (product.config?.options?.length ?? 0) > 0);
 
-                    {product?.config && (
-                      <Typography variant="body2" sx={{ opacity: 0.7, mt: 0.5 }}>
-                        Customizable
-                      </Typography>
-                    )}
-                  </Box>
+      if (isConfigurable) openConfigurator(product);
+      else addToCart(product);
+    }}
+    sx={{ borderRadius: 3 }}
+  >
+    <CardContent sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+      <Box>
+        <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.15 }}>
+          {product.name}
+        </Typography>
 
-                  <Typography sx={{ fontWeight: 900, whiteSpace: "nowrap" }}>
-                    {formatEUR(product.price)}
-                  </Typography>
-                </Stack>
+        {product?.config && (
+          <Typography variant="body2" sx={{ opacity: 0.75, mt: 0.5 }}>
+            Tap to customize
+          </Typography>
+        )}
+      </Box>
 
-                <Button
-                  fullWidth
-                  variant="contained"
-                  sx={{ mt: 2, borderRadius: 2, py: 1.1, fontWeight: 800 }}
-                  onClick={() => addToCart(product)}
-                >
-                  Add
-                </Button>
-              </CardContent>
-            </Card>
+      <Box sx={{ mt: "auto" }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+          <Typography sx={{ opacity: 0.75 }}>Price</Typography>
+          <Typography sx={{ fontWeight: 900 }}>{formatEUR(product.price)}</Typography>
+        </Stack>
+
+        {/* Butonul rămâne, dar îl facem să facă același lucru */}
+        <Button
+          fullWidth
+          variant="contained"
+          sx={{ borderRadius: 2, py: 1.1, fontWeight: 900 }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const isConfigurable =
+              !!product?.config &&
+              (product.config?.salads?.enabled || (product.config?.options?.length ?? 0) > 0);
+
+            if (isConfigurable) openConfigurator(product);
+            else addToCart(product);
+          }}
+        >
+          {product?.config ? "Customize" : "Add"}
+        </Button>git add.
+        
+      </Box>
+    </CardContent>
+  </CardActionArea>
+</Card>
+
+
           </Grid>
         ))}
     </Grid>
@@ -437,7 +502,7 @@ function App() {
   {/* RIGHT: Cart */}
   <Grid item xs={12} md={5}>
     <Box sx={{ position: { md: "sticky" }, top: { md: 88 } }}>
-      <Paper sx={{ p: 2, borderRadius: 3 }} variant="outlined">
+  <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>
           Cart
         </Typography>
@@ -447,49 +512,39 @@ function App() {
         ) : (
           <Stack spacing={1}>
             {cart.map((item, index) => (
-              <Paper
-                key={index}
-                variant="outlined"
-                sx={{ p: 1.25, borderRadius: 2 }}
-              >
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="flex-start"
-                  justifyContent="space-between"
-                >
-                  <Box sx={{ pr: 1 }}>
-                    <Typography sx={{ fontWeight: 800, lineHeight: 1.2 }}>
-                      {item.displayName || item.name}
-                    </Typography>
-                    <Typography variant="body2" sx={{ opacity: 0.75, mt: 0.25 }}>
-                      {formatEUR(item.price)}
-                    </Typography>
-                  </Box>
+              <Paper key={index} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+  <Stack direction="row" spacing={1} alignItems="flex-start" justifyContent="space-between">
+    <Box sx={{ pr: 1 }}>
+      <Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
+        {item.displayName || item.name}
+      </Typography>
+      <Typography variant="body2" sx={{ opacity: 0.75, mt: 0.25 }}>
+        {formatEUR(item.price)}
+      </Typography>
+    </Box>
 
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    sx={{ borderRadius: 2, minWidth: 0, px: 1.2 }}
-                    onClick={() => removeFromCart(index)}
-                  >
-                    X
-                  </Button>
-                </Stack>
-              </Paper>
+    <Button
+      size="small"
+      variant="outlined"
+      color="error"
+      sx={{ borderRadius: 2, minWidth: 0, px: 1.2 }}
+      onClick={() => removeFromCart(index)}
+    >
+      X
+    </Button>
+  </Stack>
+</Paper>
+
             ))}
           </Stack>
         )}
 
         <Divider sx={{ my: 2 }} />
+<Stack direction="row" justifyContent="space-between" alignItems="center">
+  <Typography sx={{ fontWeight: 900, fontSize: 18 }}>Total</Typography>
+  <Typography sx={{ fontWeight: 900, fontSize: 18 }}>{formatEUR(total)}</Typography>
+</Stack>
 
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography sx={{ fontWeight: 900, fontSize: 18 }}>Total</Typography>
-          <Typography sx={{ fontWeight: 900, fontSize: 18 }}>
-            {formatEUR(total)}
-          </Typography>
-        </Stack>
 
         <Divider sx={{ my: 2 }} />
 
@@ -497,49 +552,53 @@ function App() {
           Pickup time
         </Typography>
 
-        <Stack spacing={0.8}>
-          {pickupSlots.map((slot) => {
-            const used = ordersCountForSlot(slot.label);
-            const isFull = used >= slot.limit;
-            const isPast = isSlotInPast(slot.label);
-            const disabledSlot = isFull || isPast;
+        <Stack spacing={1}>
+  {pickupSlots.map((slot) => {
+    const used = ordersCountForSlot(slot.label);
+    const isFull = used >= slot.limit;
+    const isPast = isSlotInPast(slot.label);
+    const disabledSlot = isFull || isPast;
 
-            return (
-              <Paper
-                key={slot.label}
-                variant="outlined"
-                sx={{
-                  p: 1,
-                  borderRadius: 2,
-                  opacity: disabledSlot ? 0.5 : 1
-                }}
-              >
-                <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <input
-                    type="radio"
-                    name="pickup"
-                    value={slot.label}
-                    checked={pickupSlot?.label === slot.label}
-                    disabled={disabledSlot}
-                    onChange={() => {
-                      setPickupSlot(slot);
-                      setOrderPlaced(false);
-                      setOrderCode("");
-                    }}
-                  />
-                  <div>
-                    <div style={{ fontWeight: 800 }}>{slot.label}</div>
-                    <div style={{ opacity: 0.7, fontSize: 13 }}>
-                      Capacity: {used}/{slot.limit}
-                      {isFull ? " • FULL" : ""}
-                      {isPast && !isFull ? " • CLOSED" : ""}
-                    </div>
-                  </div>
-                </label>
-              </Paper>
-            );
-          })}
-        </Stack>
+    const selected = pickupSlot?.label === slot.label;
+
+    return (
+      <Paper
+        key={slot.label}
+        variant="outlined"
+        sx={{
+          p: 1.25,
+          borderRadius: 2,
+          opacity: disabledSlot ? 0.5 : 1,
+          borderWidth: selected ? 2 : 1
+        }}
+      >
+        <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <input
+            type="radio"
+            name="pickup"
+            value={slot.label}
+            checked={selected}
+            disabled={disabledSlot}
+            onChange={() => {
+              setPickupSlot(slot);
+              setOrderPlaced(false);
+              setOrderCode("");
+            }}
+          />
+          <div>
+            <div style={{ fontWeight: 900 }}>{slot.label}</div>
+            <div style={{ opacity: 0.75, fontSize: 13 }}>
+              Capacity: {used}/{slot.limit}
+              {isFull ? " • FULL" : ""}
+              {isPast && !isFull ? " • CLOSED" : ""}
+            </div>
+          </div>
+        </label>
+      </Paper>
+    );
+  })}
+</Stack>
+
 
         <Button
           fullWidth
@@ -571,7 +630,7 @@ function App() {
     </Box>
   </Grid>
 </Grid>
-
+</Container>
           </>
         )}
 
@@ -667,7 +726,12 @@ function App() {
                         >
                           In lucru
                         </Button>
-                        <Button variant="contained" onClick={() => setStatus(order.id, "Gata")}>
+                        
+                         <Button variant="contained" onClick={() => setStatus(order.id, "Gata")}>
+
+
+
+                      
                           Gata
                         </Button>
                       </Stack>
@@ -765,9 +829,289 @@ function App() {
             )}
           </>
         )}
+        {/* 🔔 SNACKBAR – EXACT AICI */}
+    <Snackbar
+      open={snack.open}
+      autoHideDuration={1400}
+      onClose={() => setSnack({ open: false, msg: "" })}
+      anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+    >
+      <Alert
+        severity="success"
+        variant="filled"
+        onClose={() => setSnack({ open: false, msg: "" })}
+      >
+        {snack.msg}
+      </Alert>
+    </Snackbar>
+<Dialog
+  open={configOpen}
+  onClose={() => setConfigOpen(false)}
+  fullWidth
+  maxWidth="sm"
+>
+  <DialogTitle sx={{ fontWeight: 900 }}>
+    Customize: {configProduct?.name || ""}
+  </DialogTitle>
+
+  <DialogContent dividers>
+    {configProduct ? (
+      <Stack spacing={2}>
+        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography sx={{ opacity: 0.75 }}>Base price</Typography>
+            <Typography sx={{ fontWeight: 900 }}>
+              {formatEUR(configProduct.price)}
+            </Typography>
+          </Stack>
+        </Paper>
+
+        {/* OPTIONS (generic) */}
+        {Array.isArray(configProduct?.config?.options) &&
+          configProduct.config.options.map((opt) => {
+            const value =
+              customSelections[opt.key] ?? (opt.type === "multi" ? [] : "");
+            const required = !!opt.required;
+
+            return (
+              <Paper key={opt.key} variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
+                <Typography sx={{ fontWeight: 900, mb: 1 }}>
+                  {opt.label} {required ? "*" : ""}
+                </Typography>
+ 
+<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+  <Typography sx={{ fontWeight: 900 }}>
+    {opt.label} {required ? "*" : ""}
+  </Typography>
+  {required && (
+    <Typography variant="body2" sx={{ opacity: 0.7 }}>
+      Required
+    </Typography>
+  )}
+</Stack>
+
+                {opt.type === "single" ? (
+                  <ToggleButtonGroup
+                    value={value}
+                    exclusive
+                    onChange={(_, v) => {
+                      if (!v) return;
+                      setCustomSelections((prev) => ({ ...prev, [opt.key]: v }));
+                    }}
+                    sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}
+                  >
+                    {(opt.items || []).map((it) => (
+                      <ToggleButton
+                        key={it}
+                        value={it}
+                        sx={{
+                          borderRadius: 999,
+                          textTransform: "none",
+                          fontWeight: 800,
+                          px: 2,
+                          py: 0.6
+                        }}
+                      >
+                        {it}
+                      </ToggleButton>
+                    ))}
+                  </ToggleButtonGroup>
+                ) : (
+                  <ToggleButtonGroup
+                    value={value}
+                    onChange={(_, v) =>
+                      setCustomSelections((prev) => ({ ...prev, [opt.key]: v }))
+                    }
+                    sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}
+                  >
+                    {(opt.items || []).map((it) => (
+                      <ToggleButton
+                        key={it}
+                        value={it}
+                        sx={{
+                          borderRadius: 999,
+                          textTransform: "none",
+                          fontWeight: 800,
+                          px: 2,
+                          py: 0.6
+                        }}
+                      >
+                        {it}
+                      </ToggleButton>
+                    ))}
+                  </ToggleButtonGroup>
+                )}
+
+                {required && (
+                  <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>
+                    Required
+                  </Typography>
+                )}
+              </Paper>
+            );
+          })}
+
+        {/* SALADS (generic) */}
+        {configProduct?.config?.salads?.enabled && (
+          <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
+            <Typography sx={{ fontWeight: 900, mb: 0.5 }}>
+              Salads
+            </Typography>
+
+            {(() => {
+  const included = Number(configProduct.config.salads.included || 0);
+  const extraPrice = Number(configProduct.config.salads.extraPrice || 0);
+  const extraCount = Math.max(0, selectedSalads.length - included);
+
+  return (
+    <>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+        <Typography sx={{ fontWeight: 900 }}>Salads</Typography>
+        <Typography variant="body2" sx={{ opacity: 0.75 }}>
+          Choose {included} included • Extra {formatEUR(extraPrice)} each
+        </Typography>
+      </Stack>
+
+      <Typography variant="body2" sx={{ opacity: 0.85, mb: 1 }}>
+        Selected: <b>{selectedSalads.length}</b>
+        {extraCount > 0 && (
+          <>
+            {" "}• Extra: <b>{extraCount}</b> (+{formatEUR(extraCount * extraPrice)})
+          </>
+        )}
+      </Typography>
+    </>
+  );
+})()}
+
+
+            <Grid container spacing={1} sx={{ mt: 0.5 }}>
+  {(configProduct.config.salads.items || []).map((s) => {
+    const checked = selectedSalads.includes(s);
+
+    return (
+      <Grid item xs={6} sm={4} key={s}>
+        <Button
+          fullWidth
+          variant={checked ? "contained" : "outlined"}
+          onClick={() => toggleSalad(s)}
+          sx={{
+            borderRadius: 2,
+            justifyContent: "flex-start",
+            fontWeight: checked ? 900 : 700,
+            textTransform: "none",
+            py: 1
+          }}
+        >
+          {s}
+        </Button>
+      </Grid>
+    );
+  })}
+</Grid>
+
+          </Paper>
+        )}
+
+
+        {/* SUMMARY */}
+{(() => {
+  if (!configProduct) return null;
+
+  const included = Number(configProduct?.config?.salads?.included || 0);
+  const extraPrice = Number(configProduct?.config?.salads?.extraPrice || 0);
+
+  const extra = saladsEnabled
+    ? Math.max(0, selectedSalads.length - included)
+    : 0;
+
+  const totalPrice = Number(configProduct.price) + extra * extraPrice;
+
+  return (
+    <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Typography sx={{ fontWeight: 900 }}>Total</Typography>
+        <Typography sx={{ fontWeight: 900 }}>{formatEUR(totalPrice)}</Typography>
+      </Stack>
+
+      {!saladsOk && (
+        <Typography color="error" sx={{ mt: 1 }}>
+          Please select at least {included} salads.
+        </Typography>
+      )}
+
+      {missingRequired && (
+        <Typography color="error" sx={{ mt: 1 }}>
+          Please complete required options (*).
+        </Typography>
+      )}
+    </Paper>
+  );
+})()}
+
+      </Stack>
+    ) : (
+      <Typography sx={{ opacity: 0.75 }}>Loading…</Typography>
+    )}
+  </DialogContent>
+
+  <DialogActions sx={{ p: 2 }}>
+    <Button variant="outlined" onClick={() => setConfigOpen(false)}>
+      Cancel
+    </Button>
+
+    <Button
+  variant="contained"
+  disabled={disableAddToCart}
+  onClick={() => {
+    if (!configProduct) return;
+
+    const included = Number(configProduct?.config?.salads?.included || 0);
+    const extraPrice = Number(configProduct?.config?.salads?.extraPrice || 0);
+    const extra = saladsEnabled ? Math.max(0, selectedSalads.length - included) : 0;
+
+    const totalPrice = Number(configProduct.price) + extra * extraPrice;
+
+    const opts = configProduct?.config?.options || [];
+    const optText = opts
+      .map((o) => {
+        const v = customSelections[o.key];
+        if (!v) return null;
+        return Array.isArray(v) ? `${o.label}: ${v.join(", ")}` : `${o.label}: ${v}`;
+      })
+      .filter(Boolean)
+      .join(" • ");
+
+    const saladsText =
+      saladsEnabled && selectedSalads.length
+        ? `Salads: ${selectedSalads.join(", ")}`
+        : "";
+
+    const parts = [optText, saladsText].filter(Boolean).join(" • ");
+    const displayName = parts ? `${configProduct.name} (${parts})` : configProduct.name;
+
+    addToCart({
+      ...configProduct,
+      price: Number(totalPrice.toFixed(2)),
+      displayName,
+      custom: { selections: customSelections, salads: selectedSalads }
+    });
+
+    setConfigOpen(false);
+  }}
+  sx={{ fontWeight: 900 }}
+>
+  Add to cart
+</Button>
+
+  </DialogActions>
+</Dialog>
+
       </Container>
     </>
   );
+
 }
+
 
 export default App;
