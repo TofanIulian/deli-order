@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { db } from "./firebase";
+import { db,auth } from "./firebase";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 
 import {
   addDoc,
@@ -10,7 +11,8 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  updateDoc
+  updateDoc,
+  setDoc
 } from "firebase/firestore";
 
 import {
@@ -52,11 +54,12 @@ const PREP_BUFFER_MIN = 10;
 
 const SLOT_MINUTES = 15;
 const WINDOW_HOURS = 2;
-const SLOT_LIMIT = 3;
+const SLOT_LIMIT = 5;
 
-// PIN-only
-const STAFF_PIN = "1111";
-const ADMIN_PIN = "9999";
+// AUTH
+const ADMIN_EMAILS = ["admin@deli.local"];
+
+
 
 // ===== TIME HELPERS =====
 function pad2(n) {
@@ -94,6 +97,31 @@ function chipColor(status) {
   return "default";
 }
 
+function playBeep() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+
+    o.type = "sine";
+    o.frequency.value = 880; // beep
+    o.connect(g);
+    g.connect(ctx.destination);
+
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+
+    o.start();
+    o.stop(ctx.currentTime + 0.26);
+
+    setTimeout(() => ctx.close(), 400);
+  } catch {
+    // ignore (some browsers block until user interaction)
+  }
+}
+
 function chipIcon(status) {
   if (status === "Gata") return <CheckCircleIcon fontSize="small" />;
   if (status === "In lucru") return <HourglassTopIcon fontSize="small" />;
@@ -110,38 +138,39 @@ export default function App() {
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode") || "client";
   const isStaff = mode === "staff";
+const [lastPublicStatus, setLastPublicStatus] = useState("");
 
-  // ===== ROLE (PIN-only) =====
-  const [pinInput, setPinInput] = useState("");
-  const [role, setRole] = useState(sessionStorage.getItem("role") || "");
-  const staffAllowed = isStaff && (role === "staff" || role === "admin");
-  const isAdminRole = role === "admin";
+  // ===== AUTH (Email/Password) =====
+const [authUser, setAuthUser] = useState(null);
+const [email, setEmail] = useState("");
+const [password, setPassword] = useState("");
 
-  function tryStaffLogin(e) {
-    e.preventDefault();
+// staff = orice user autentificat (pe /?mode=staff)
+const staffAllowed = isStaff && !!authUser;
 
-    if (pinInput === ADMIN_PIN) {
-      sessionStorage.setItem("role", "admin");
-      setRole("admin");
-      setPinInput("");
-      return;
-    }
+// admin = doar emailurile din listă
+const isAdminRole = !!authUser?.email && ADMIN_EMAILS.includes(authUser.email);
+ 
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, (u) => setAuthUser(u));
+  return () => unsub();
+}, []);
 
-    if (pinInput === STAFF_PIN) {
-      sessionStorage.setItem("role", "staff");
-      setRole("staff");
-      setPinInput("");
-      return;
-    }
-
-    alert("PIN greșit");
+  async function tryStaffLogin(e) {
+  e.preventDefault();
+  try {
+    await signInWithEmailAndPassword(auth, email.trim(), password);
+    setPassword("");
+  } catch (err) {
+    alert(err.message);
   }
+}
 
-  function staffLogout() {
-    sessionStorage.removeItem("role");
-    setRole("");
-    setPinInput("");
-  }
+async function staffLogout() {
+  await signOut(auth);
+  setEmail("");
+  setPassword("");
+}
 
   // ===== CLIENT STATE =====
   const [cart, setCart] = useState([]);
@@ -149,14 +178,19 @@ export default function App() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderCode, setOrderCode] = useState("");
   const [snack, setSnack] = useState({ open: false, msg: "" });
-
+const [publicOrder, setPublicOrder] = useState(null);
   // ===== FIRESTORE STATE =====
   const [orders, setOrders] = useState([]);
   const [productsDb, setProductsDb] = useState([]);
-
+const [publicOrders, setPublicOrders] = useState([]);
   // ===== STAFF UI STATE =====
   const [showOnlyOpen, setShowOnlyOpen] = useState(true);
   const [staffTab, setStaffTab] = useState("orders");
+  useEffect(() => {
+  if (!isAdminRole && staffTab === "products") {
+    setStaffTab("orders");
+  }
+}, [isAdminRole, staffTab]);
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("");
 
@@ -165,6 +199,17 @@ export default function App() {
   const [configProduct, setConfigProduct] = useState(null);
   const [selectedSalads, setSelectedSalads] = useState([]);
   const [customSelections, setCustomSelections] = useState({});
+  const [editOpen, setEditOpen] = useState(false);
+  const [editProduct, setEditProduct] = useState(null);
+
+  // draft fields (simple, safe)
+  const [cfgSaladsEnabled, setCfgSaladsEnabled] = useState(false);
+  const [cfgSaladsIncluded, setCfgSaladsIncluded] = useState("2");
+  const [cfgSaladsExtraPrice, setCfgSaladsExtraPrice] = useState("0.7");
+  const [cfgSaladsItemsText, setCfgSaladsItemsText] = useState("");
+
+  // options (super simplu): scrii una pe linie: key|label|type|required|item1,item2,item3
+  const [cfgOptionsText, setCfgOptionsText] = useState("");
 
   function openConfigurator(product) {
     setConfigProduct(product);
@@ -187,9 +232,8 @@ export default function App() {
   );
 
   function ordersCountForSlot(slotLabel) {
-    return orders.filter((o) => o.pickupTime === slotLabel).length;
-  }
-
+  return publicOrders.filter((o) => o.pickupTime === slotLabel).length;
+}
   function toMinutes(hhmm) {
     const [h, m] = hhmm.split(":").map(Number);
     return h * 60 + m;
@@ -203,18 +247,57 @@ export default function App() {
     const nowMin = now.getHours() * 60 + now.getMinutes();
     return slotStartMin < nowMin + PREP_BUFFER_MIN;
   }
-
+ 
   // ===== LIVE ORDERS =====
   useEffect(() => {
-    const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
+  if (!isStaff || !staffAllowed) {
+    setOrders([]);
+    return;
+  }
+
+  console.log("[ORDERS] subscribing");
+
+  const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+
+  const unsub = onSnapshot(
+    q,
+    (snap) => {
+      console.log("[ORDERS] snap size =", snap.size);
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      console.log("[ORDERS] first =", list[0]);
       setOrders(list);
-    });
-    return () => unsub();
-  }, []);
+    },
+    (err) => {
+      console.error("[ORDERS] ERROR =", err);
+    }
+  );
+
+  return () => {
+    console.log("[ORDERS] unsub");
+    unsub();
+  };
+}, [isStaff, staffAllowed]);
 
   // ===== LIVE PRODUCTS =====
+  useEffect(() => {
+  if (isStaff) return;
+
+  const q = query(collection(db, "orders_public"), orderBy("createdAt", "desc"));
+
+  const unsub = onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setPublicOrders(list);
+    },
+    (err) => console.error("PUBLIC ORDERS ERROR:", err)
+  );
+
+  return () => unsub();
+}, [isStaff]);
+  
+  
+  
   useEffect(() => {
     const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
@@ -263,18 +346,44 @@ export default function App() {
       status: "Nou",
       createdAt: serverTimestamp()
     };
+const existing = orders.filter(o => o.pickupTime === pickupSlot.label);
 
-    await addDoc(collection(db, "orders"), newOrder);
+if (existing.length >= SLOT_LIMIT) {
+  alert("Slot full, choose another time");
+  return;
+}
+   const orderRef = await addDoc(collection(db, "orders"), newOrder);
 
+// 🔹 public capacity tracking
+await setDoc(doc(db, "orders_public", orderRef.id), {
+  pickupTime: pickupSlot.label,
+  pickupStartMin: pickupSlot.startMin,
+  pickupDate,
+  createdAt: serverTimestamp()
+});
+
+// 🔹 client tracking (ce aveai deja)
+await setDoc(doc(db, "order_public", code), {
+  code,
+  status: "Nou",
+  pickupTime: pickupSlot.label,
+  pickupDate,
+  updatedAt: serverTimestamp()
+});
     setOrderCode(code);
     setOrderPlaced(true);
     setCart([]);
     setPickupSlot(null);
   }
 
-  async function setStatus(orderId, newStatus) {
-    await updateDoc(doc(db, "orders", orderId), { status: newStatus });
-  }
+  async function setStatus(orderId, orderCode, newStatus) {
+  await updateDoc(doc(db, "orders", orderId), { status: newStatus });
+
+  await updateDoc(doc(db, "order_public", orderCode), {
+    status: newStatus,
+    updatedAt: serverTimestamp()
+  });
+}
 
   // ===== PRODUCTS ADMIN =====
   async function addProduct(e) {
@@ -311,6 +420,76 @@ export default function App() {
     if (!window.confirm(`Stergi produsul "${product.name}"?`)) return;
     await deleteDoc(doc(db, "products", product.id));
   }
+function openEditConfig(p) {
+  setEditProduct(p);
+
+  const salads = p?.config?.salads || {};
+  setCfgSaladsEnabled(!!salads.enabled);
+  setCfgSaladsIncluded(String(salads.included ?? 2));
+  setCfgSaladsExtraPrice(String(salads.extraPrice ?? 0.7));
+  setCfgSaladsItemsText((salads.items || []).join("\n"));
+
+  const opts = Array.isArray(p?.config?.options) ? p.config.options : [];
+  // format text: key|label|single|true|Butter,Hot
+  const lines = opts.map((o) => {
+    const items = Array.isArray(o.items) ? o.items.join(",") : "";
+    return `${o.key}|${o.label}|${o.type || "single"}|${o.required ? "true" : "false"}|${items}`;
+  });
+  setCfgOptionsText(lines.join("\n"));
+
+  setEditOpen(true);
+}
+
+function parseOptionsText(text) {
+  // fiecare linie: key|label|type|required|item1,item2,item3
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [key, label, type, required, itemsStr] = line.split("|").map((x) => (x || "").trim());
+      const items = (itemsStr || "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+
+      return {
+        key,
+        label: label || key,
+        type: type === "multi" ? "multi" : "single",
+        required: required === "true",
+        items
+      };
+    })
+    .filter((o) => o.key); // doar cele valide
+}
+
+async function saveEditConfig() {
+  if (!editProduct) return;
+
+  const saladsItems = cfgSaladsItemsText
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const included = Number(cfgSaladsIncluded);
+  const extraPrice = Number(cfgSaladsExtraPrice);
+
+  const config = {
+    salads: {
+      enabled: !!cfgSaladsEnabled,
+      included: Number.isFinite(included) ? included : 0,
+      extraPrice: Number.isFinite(extraPrice) ? extraPrice : 0,
+      items: saladsItems
+    },
+    options: parseOptionsText(cfgOptionsText)
+  };
+
+  await updateDoc(doc(db, "products", editProduct.id), { config });
+
+  setEditOpen(false);
+  setEditProduct(null);
+}
 
   // ===== STAFF ORDERS SORT/FILTER =====
   const sortedOrders = useMemo(
@@ -344,21 +523,51 @@ export default function App() {
     return Number(configProduct.price) + extraCount * extraPrice;
   }, [configProduct, extraCount, extraPrice]);
 
+useEffect(() => {
+  if (!orderCode) return;
+
+  const unsub = onSnapshot(doc(db, "order_public", orderCode), (snap) => {
+    const next = snap.exists() ? snap.data() : null;
+
+    if (next?.status && next.status !== lastPublicStatus) {
+      setSnack({ open: true, msg: `Status: ${next.status}` });
+
+      if (next.status === "Gata") {
+        playBeep();
+      }
+
+      setLastPublicStatus(next.status);
+    }
+
+    setPublicOrder(next);
+  });
+
+  return () => unsub();
+}, [orderCode, lastPublicStatus]);
+
+
+
   return (
     <>
       <AppBar position="sticky" elevation={1}>
-        <Toolbar>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Deli – Quick Order
-          </Typography>
-          <Button color="inherit" href="/">
-            Client
-          </Button>
-          <Button color="inherit" href="/?mode=staff">
-            Staff
-          </Button>
-        </Toolbar>
-      </AppBar>
+  <Toolbar>
+    <Typography variant="h6" sx={{ flexGrow: 1 }}>
+      Deli – Quick Order
+    </Typography>
+
+    {isStaff && staffAllowed && (
+      <Button color="inherit" onClick={staffLogout}>
+        Logout
+      </Button>
+    )}
+
+    {isStaff && (
+      <Button color="inherit" href="/">
+        Back to Client
+      </Button>
+    )}
+  </Toolbar>
+</AppBar>
 
       <Container maxWidth="lg" sx={{ py: 3 }}>
         {/* STAFF PIN ONLY */}
@@ -369,19 +578,26 @@ export default function App() {
             </Typography>
 
             <Box component="form" onSubmit={tryStaffLogin} sx={{ display: "grid", gap: 1.5 }}>
-              <TextField
-                label="PIN"
-                type="password"
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-              />
-              <Button type="submit" variant="contained" sx={{ fontWeight: 900 }}>
-                Enter
-              </Button>
-            </Box>
+  <TextField
+    label="Email"
+    value={email}
+    onChange={(e) => setEmail(e.target.value)}
+    autoComplete="username"
+  />
+  <TextField
+    label="Password"
+    type="password"
+    value={password}
+    onChange={(e) => setPassword(e.target.value)}
+    autoComplete="current-password"
+  />
+  <Button type="submit" variant="contained" sx={{ fontWeight: 900 }}>
+    Login
+  </Button>
+</Box>
             <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>
-              Staff PIN = {STAFF_PIN} • Admin PIN = {ADMIN_PIN}
-            </Typography>
+  Staff access requires login.
+</Typography>
           </Paper>
         )}
 
@@ -404,6 +620,7 @@ export default function App() {
                     <Grid item xs={12} sm={6} key={product.id}>
                       <Card variant="outlined" sx={{ borderRadius: 3, height: "100%" }}>
                         <CardActionArea
+                        component="div"
                           onClick={() => {
                             const isConfigurable =
                               !!product?.config &&
@@ -597,6 +814,38 @@ export default function App() {
                       </Typography>
                     </Paper>
                   )}
+                {publicOrder && (
+  <Paper
+    variant="outlined"
+    sx={{
+      mt: 2,
+      p: 1.25,
+      borderRadius: 2,
+      borderWidth: publicOrder.status === "Gata" ? 2 : 1,
+      opacity: 0.95
+    }}
+  >
+    <Stack direction="row" alignItems="center" justifyContent="space-between">
+      <Typography sx={{ fontWeight: 900 }}>
+        Status: {publicOrder.status}
+      </Typography>
+
+      <Chip
+        label={publicOrder.status}
+        color={chipColor(publicOrder.status)}
+        icon={chipIcon(publicOrder.status)}
+        size="small"
+      />
+    </Stack>
+
+    {publicOrder.status === "Gata" && (
+      <Typography sx={{ mt: 0.5, fontWeight: 800 }}>
+        ✅ Ready for pickup!
+      </Typography>
+    )}
+  </Paper>
+)}
+                
                 </Paper>
               </Box>
             </Grid>
@@ -607,14 +856,15 @@ export default function App() {
         {isStaff && staffAllowed && (
           <>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2, flexWrap: "wrap" }}>
-              <Button variant="outlined" onClick={staffLogout}>
-                Logout
-              </Button>
+              
 
-              <Tabs value={staffTab} onChange={(_, v) => setStaffTab(v)} sx={{ minHeight: 0 }}>
-                <Tab label="Orders" value="orders" />
-                <Tab label="Products" value="products" />
-              </Tabs>
+              <Tabs value={staffTab} onChange={(_, v) => setStaffTab(v)}>
+  <Tab label="Orders" value="orders" />
+
+  {isAdminRole && (
+    <Tab label="Products" value="products" />
+  )}
+</Tabs>
 
               {staffTab === "orders" && (
                 <FormControlLabel
@@ -632,76 +882,80 @@ export default function App() {
 
             <Divider sx={{ mb: 2 }} />
 
+
+
             {staffTab === "orders" && (
-              <>
-                <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
-                  Orders (live)
-                </Typography>
+  <>
+    <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
+      Orders (live)
+    </Typography>
 
-                {staffOrders.length === 0 && (
-                  <Typography sx={{ opacity: 0.7 }}>No orders yet.</Typography>
-                )}
+    {staffOrders.length === 0 && (
+      <Typography sx={{ opacity: 0.7 }}>No orders yet.</Typography>
+    )}
 
-                {staffOrders.map((order) => (
-                  <Card key={order.id} sx={{ mb: 2, borderRadius: 3 }}>
-                    <CardContent>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        alignItems="center"
-                        justifyContent="space-between"
-                        flexWrap="wrap"
-                      >
-                        <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                          {order.pickupTime}
-                        </Typography>
+    {staffOrders.map((order) => (
+      <Card key={order.id} sx={{ mb: 2, borderRadius: 3 }}>
+        <CardContent>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            justifyContent="space-between"
+            flexWrap="wrap"
+          >
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              {order.pickupTime}
+            </Typography>
 
-                        <Chip
-                          icon={chipIcon(order.status)}
-                          label={order.status}
-                          color={chipColor(order.status)}
-                          variant="filled"
-                          size="small"
-                        />
+            <Chip
+              icon={chipIcon(order.status)}
+              label={order.status}
+              color={chipColor(order.status)}
+              variant="filled"
+              size="small"
+            />
 
-                        <Typography sx={{ fontWeight: 800, letterSpacing: 1 }}>
-                          {order.code}
-                        </Typography>
-                      </Stack>
+            <Typography sx={{ fontWeight: 800, letterSpacing: 1 }}>
+              {order.code}
+            </Typography>
+          </Stack>
 
-                      <Typography sx={{ mt: 1 }}>
-                        <b>Total:</b> {formatEUR(order.total)}
-                      </Typography>
+          <Typography sx={{ mt: 1 }}>
+            <b>Total:</b> {formatEUR(order.total)}
+          </Typography>
 
-                      <Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
-                      {(order.items || []).map((it, idx) => (
-                        <Typography key={idx} variant="body2">
-                          - {it.displayName || it.name} ({formatEUR(it.price)})
-                        </Typography>
-                      ))}
+          <Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
+          {(order.items || []).map((it, idx) => (
+            <Typography key={idx} variant="body2">
+              - {it.displayName || it.name} ({formatEUR(it.price)})
+            </Typography>
+          ))}
 
-                      <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap">
-                        <Button variant="outlined" onClick={() => setStatus(order.id, "Nou")}>
-                          Nou
-                        </Button>
-                        <Button variant="outlined" onClick={() => setStatus(order.id, "In lucru")}>
-                          In lucru
-                        </Button>
-                        <Button variant="contained" onClick={() => setStatus(order.id, "Gata")}>
-                          Gata
-                        </Button>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                ))}
-              </>
-            )}
+          <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap">
+            <Button variant="outlined" onClick={() => setStatus(order.id, order.code, "Nou")}>
+              Nou
+            </Button>
+            <Button variant="outlined" onClick={() => setStatus(order.id, order.code, "In lucru")}>
+              In lucru
+            </Button>
+            <Button variant="contained" onClick={() => setStatus(order.id, order.code, "Gata")}>
+              Gata
+            </Button>
+          </Stack>
+        </CardContent>
+      </Card>
+    ))}
+  </>
+)}
 
-            {staffTab === "products" && (
+            {staffTab === "products" && isAdminRole && (
               <>
                 <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
                   Products {isAdminRole ? "(Admin)" : "(Staff)"}
                 </Typography>
+
+
 
                 {isAdminRole && (
                   <Card sx={{ borderRadius: 3, mb: 2 }}>
@@ -761,6 +1015,14 @@ export default function App() {
                         <Button variant="outlined" onClick={() => toggleProductActive(p)} disabled={!isAdminRole}>
                           {p.active === false ? "Activate" : "Deactivate"}
                         </Button>
+{isAdminRole && (
+  <Button
+    variant="outlined"
+    onClick={() => openEditConfig(p)}
+  >
+    Edit config
+  </Button>
+)}
 
                         <Button
                           variant="outlined"
@@ -785,6 +1047,72 @@ export default function App() {
           </>
         )}
       </Container>
+
+<Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="sm">
+  <DialogTitle sx={{ fontWeight: 900 }}>
+    Edit config: {editProduct?.name || ""}
+  </DialogTitle>
+
+  <DialogContent dividers>
+    <Stack spacing={2}>
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={cfgSaladsEnabled}
+            onChange={(e) => setCfgSaladsEnabled(e.target.checked)}
+          />
+        }
+        label="Enable salads"
+      />
+
+      <Stack direction="row" spacing={1}>
+        <TextField
+          label="Included salads"
+          value={cfgSaladsIncluded}
+          onChange={(e) => setCfgSaladsIncluded(e.target.value)}
+          fullWidth
+        />
+        <TextField
+          label="Extra price (€)"
+          value={cfgSaladsExtraPrice}
+          onChange={(e) => setCfgSaladsExtraPrice(e.target.value)}
+          fullWidth
+        />
+      </Stack>
+
+      <TextField
+        label="Salads list (one per line)"
+        value={cfgSaladsItemsText}
+        onChange={(e) => setCfgSaladsItemsText(e.target.value)}
+        multiline
+        minRows={6}
+        fullWidth
+      />
+
+      <Divider />
+
+      <TextField
+        label="Options (one per line): key|label|type(single/multi)|required(true/false)|items(comma)"
+        value={cfgOptionsText}
+        onChange={(e) => setCfgOptionsText(e.target.value)}
+        multiline
+        minRows={6}
+        fullWidth
+        placeholder={`chicken|Chicken|single|true|Butter,Hot (Spicy)\nsauce|Sauce|multi|false|Mayo,Ketchup`}
+      />
+    </Stack>
+  </DialogContent>
+
+  <DialogActions sx={{ p: 2 }}>
+    <Button variant="outlined" onClick={() => setEditOpen(false)}>
+      Cancel
+    </Button>
+    <Button variant="contained" sx={{ fontWeight: 900 }} onClick={saveEditConfig}>
+      Save
+    </Button>
+  </DialogActions>
+</Dialog>
+
 
       {/* SNACKBAR */}
       <Snackbar
