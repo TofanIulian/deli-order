@@ -40,7 +40,7 @@ import {
   DialogActions,
   ToggleButton,
   ToggleButtonGroup,
-  CardActionArea,
+  
   Snackbar,
   Alert
 } from "@mui/material";
@@ -48,6 +48,9 @@ import {
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import HourglassTopIcon from "@mui/icons-material/HourglassTop";
 import FiberNewIcon from "@mui/icons-material/FiberNew";
+import Drawer from "@mui/material/Drawer";
+import IconButton from "@mui/material/IconButton";
+import CloseIcon from "@mui/icons-material/Close";
 
 // ===== SETTINGS =====
 const PREP_BUFFER_MIN = 10;
@@ -133,12 +136,16 @@ function formatEUR(n) {
   return `€${Number(n).toFixed(2)}`;
 }
 
+
+
 export default function App() {
   // ===== MODE =====
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode") || "client";
   const isStaff = mode === "staff";
 const [lastPublicStatus, setLastPublicStatus] = useState("");
+const [cartOpen, setCartOpen] = useState(false);
+const [publicOrder, setPublicOrder] = useState(null);
 
   // ===== AUTH (Email/Password) =====
 const [authUser, setAuthUser] = useState(null);
@@ -151,6 +158,21 @@ const staffAllowed = isStaff && !!authUser;
 // admin = doar emailurile din listă
 const isAdminRole = !!authUser?.email && ADMIN_EMAILS.includes(authUser.email);
  
+
+
+
+
+// categorie per produs (dacă nu există în DB, cade pe Rolls)
+function getCategory(p) {
+  const c = String(p?.category || "").trim().toLowerCase();
+
+  // acceptă și “Rolls”, și “rolls”, și “Drinks”, etc.
+  if (c === "rolls" || c === "sides" || c === "drinks") return c;
+
+  // fallback dacă nu există category în DB
+  return "rolls";
+}
+
 useEffect(() => {
   const unsub = onAuthStateChanged(auth, (u) => setAuthUser(u));
   return () => unsub();
@@ -175,10 +197,15 @@ async function staffLogout() {
   // ===== CLIENT STATE =====
   const [cart, setCart] = useState([]);
   const [pickupSlot, setPickupSlot] = useState(null);
-  const [orderPlaced, setOrderPlaced] = useState(false);
+  const [activeCategory, setActiveCategory] = useState("rolls"); // default deschis: Rolls
   const [orderCode, setOrderCode] = useState("");
   const [snack, setSnack] = useState({ open: false, msg: "" });
-const [publicOrder, setPublicOrder] = useState(null);
+const CATEGORIES = [
+  { key: "rolls", label: "ROLLS" },
+  { key: "sides", label: "SIDES" },
+  { key: "drinks", label: "DRINKS" }
+];
+
   // ===== FIRESTORE STATE =====
   const [orders, setOrders] = useState([]);
   const [productsDb, setProductsDb] = useState([]);
@@ -309,14 +336,14 @@ const [publicOrders, setPublicOrders] = useState([]);
 
   // ===== CART HELPERS =====
   function addToCart(item) {
-    setOrderPlaced(false);
+    
     setOrderCode("");
     setCart((prev) => [...prev, item]);
     setSnack({ open: true, msg: "Added to cart" });
   }
 
   function removeFromCart(indexToRemove) {
-    setOrderPlaced(false);
+    
     setOrderCode("");
     setCart((prev) => prev.filter((_, i) => i !== indexToRemove));
   }
@@ -371,7 +398,7 @@ await setDoc(doc(db, "order_public", code), {
   updatedAt: serverTimestamp()
 });
     setOrderCode(code);
-    setOrderPlaced(true);
+    
     setCart([]);
     setPickupSlot(null);
   }
@@ -547,65 +574,67 @@ useEffect(() => {
 
 
 
-  return (
-    <>
-      <AppBar position="sticky" elevation={1}>
-  <Toolbar>
-    <Typography variant="h6" sx={{ flexGrow: 1 }}>
-      Deli – Quick Order
-    </Typography>
 
-    {isStaff && staffAllowed && (
-      <Button color="inherit" onClick={staffLogout}>
-        Logout
-      </Button>
-    )}
+ return (
+  <>
+    <AppBar position="sticky" elevation={1}>
+      <Toolbar>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          Deli – Quick Order
+        </Typography>
 
-    {isStaff && (
-      <Button color="inherit" href="/">
-        Back to Client
-      </Button>
-    )}
-  </Toolbar>
-</AppBar>
-
-      <Container maxWidth="lg" sx={{ py: 3 }}>
-        {/* STAFF PIN ONLY */}
-        {isStaff && !staffAllowed && (
-          <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, mb: 2, maxWidth: 420 }}>
-            <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
-              Staff / Admin Access
-            </Typography>
-
-            <Box component="form" onSubmit={tryStaffLogin} sx={{ display: "grid", gap: 1.5 }}>
-  <TextField
-    label="Email"
-    value={email}
-    onChange={(e) => setEmail(e.target.value)}
-    autoComplete="username"
-  />
-  <TextField
-    label="Password"
-    type="password"
-    value={password}
-    onChange={(e) => setPassword(e.target.value)}
-    autoComplete="current-password"
-  />
-  <Button type="submit" variant="contained" sx={{ fontWeight: 900 }}>
-    Login
-  </Button>
-</Box>
-            <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>
-  Staff access requires login.
-</Typography>
-          </Paper>
+        {isStaff && staffAllowed && (
+          <Button color="inherit" onClick={staffLogout}>
+            Logout
+          </Button>
         )}
 
-        {/* CLIENT UI */}
-        {!isStaff && (
-          <Grid container spacing={2.5} alignItems="flex-start">
-            {/* LEFT: Menu */}
-            <Grid item xs={12} md={7}>
+        {isStaff && (
+          <Button color="inherit" href="/">
+            Back to Client
+          </Button>
+        )}
+      </Toolbar>
+    </AppBar>
+
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      {/* STAFF LOGIN */}
+      {isStaff && !staffAllowed && (
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, mb: 2, maxWidth: 420 }}>
+          <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
+            Staff / Admin Access
+          </Typography>
+
+          <Box component="form" onSubmit={tryStaffLogin} sx={{ display: "grid", gap: 1.5 }}>
+            <TextField
+              label="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+            />
+            <TextField
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+            <Button type="submit" variant="contained" sx={{ fontWeight: 900 }}>
+              Login
+            </Button>
+          </Box>
+
+          <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>
+            Staff access requires login.
+          </Typography>
+        </Paper>
+      )}
+
+      {/* CLIENT UI */}
+      {!isStaff && (
+        <Grid container spacing={2.5} alignItems="flex-start">
+          <Grid item xs={12}>
+            <Box sx={{ maxWidth: 520, mx: "auto" }}>
               <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>
                 Menu
               </Typography>
@@ -613,520 +642,580 @@ useEffect(() => {
                 Tap an item to add it. Some items can be customized.
               </Typography>
 
-              <Grid container spacing={2}>
+              {/* Categories (top buttons) */}
+              <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
+                {CATEGORIES.map((c) => (
+                  <Button
+                    key={c.key}
+                    variant={activeCategory === c.key ? "contained" : "outlined"}
+                    onClick={() => setActiveCategory(c.key)}
+                    sx={{ borderRadius: 999, fontWeight: 900 }}
+                  >
+                    {c.label}
+                  </Button>
+                ))}
+              </Stack>
+
+              {/* Products list (ONLY active category) */}
+              <Stack spacing={1.2}>
                 {productsDb
                   .filter((p) => p.active !== false)
-                  .map((product) => (
-                    <Grid item xs={12} sm={6} key={product.id}>
-                      <Card variant="outlined" sx={{ borderRadius: 3, height: "100%" }}>
-                        <CardActionArea
-                        component="div"
-                          onClick={() => {
-                            const isConfigurable =
-                              !!product?.config &&
-                              (product.config?.salads?.enabled ||
-                                (product.config?.options?.length ?? 0) > 0);
+                  .filter((p) => getCategory(p) === activeCategory)
+                  .map((product) => {
+                    const isConfigurable =
+                      !!product?.config &&
+                      (product.config?.salads?.enabled || (product.config?.options?.length ?? 0) > 0);
 
-                            if (isConfigurable) openConfigurator(product);
-                            else addToCart(product);
-                          }}
-                          sx={{ borderRadius: 3 }}
+                      <Button
+  variant="contained"
+  sx={{ borderRadius: 999, fontWeight: 900, px: 2 }}
+  onClick={() => {
+    console.log("CLICK", product.name, "isConfigurable=", isConfigurable, product.config);
+    if (isConfigurable) openConfigurator(product);
+    else addToCart(product);
+  }}
+>
+  {isConfigurable ? "Customize" : "Add"}
+</Button>
+                    return (
+                      <Paper key={product.id} variant="outlined" sx={{ p: 1.25, borderRadius: 3 }}>
+                        <Stack
+                          direction="row"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          spacing={2}
                         >
-                          <CardContent sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
-                            <Box>
-                              <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.15 }}>
-                                {product.name}
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 900, lineHeight: 1.1 }} noWrap>
+                              {product.name}
+                            </Typography>
+                            {isConfigurable ? (
+                              <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                                Tap to customize
                               </Typography>
-
-                              {product?.config && (
-                                <Typography variant="body2" sx={{ opacity: 0.75, mt: 0.5 }}>
-                                  Tap to customize
-                                </Typography>
-                              )}
-                            </Box>
-
-                            <Box sx={{ mt: "auto" }}>
-                              <Stack
-                                direction="row"
-                                justifyContent="space-between"
-                                alignItems="center"
-                                sx={{ mb: 1 }}
-                              >
-                                <Typography sx={{ opacity: 0.75 }}>Price</Typography>
-                                <Typography sx={{ fontWeight: 900 }}>
-                                  {formatEUR(product.price)}
-                                </Typography>
-                              </Stack>
-
-                              <Button
-                                fullWidth
-                                variant="contained"
-                                sx={{ borderRadius: 2, py: 1.1, fontWeight: 900 }}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-
-                                  const isConfigurable =
-                                    !!product?.config &&
-                                    (product.config?.salads?.enabled ||
-                                      (product.config?.options?.length ?? 0) > 0);
-
-                                  if (isConfigurable) openConfigurator(product);
-                                  else addToCart(product);
-                                }}
-                              >
-                                {product?.config ? "Customize" : "Add"}
-                              </Button>
-                            </Box>
-                          </CardContent>
-                        </CardActionArea>
-                      </Card>
-                    </Grid>
-                  ))}
-              </Grid>
-            </Grid>
-
-            {/* RIGHT: Cart */}
-            <Grid item xs={12} md={5}>
-              <Box sx={{ position: { md: "sticky" }, top: { md: 88 } }}>
-                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                  <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>
-                    Cart
-                  </Typography>
-
-                  {cart.length === 0 ? (
-                    <Typography sx={{ opacity: 0.75 }}>Your cart is empty.</Typography>
-                  ) : (
-                    <Stack spacing={1}>
-                      {cart.map((item, index) => (
-                        <Paper key={index} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
-                          <Stack
-                            direction="row"
-                            spacing={1}
-                            alignItems="flex-start"
-                            justifyContent="space-between"
-                          >
-                            <Box sx={{ pr: 1 }}>
-                              <Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
-                                {item.displayName || item.name}
+                            ) : (
+                              <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                                {formatEUR(product.price)}
                               </Typography>
-                            </Box>
+                            )}
+                          </Box>
+
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+                            <Typography sx={{ fontWeight: 900 }}>
+                              {formatEUR(product.price)}
+                            </Typography>
 
                             <Button
-                              size="small"
-                              variant="outlined"
-                              color="error"
-                              sx={{ borderRadius: 2, minWidth: 0, px: 1.2 }}
-                              onClick={() => removeFromCart(index)}
+                              variant={isConfigurable ? "outlined" : "contained"}
+                              sx={{ borderRadius: 999, fontWeight: 900, px: 2 }}
+                              onClick={() => {
+                                if (isConfigurable) openConfigurator(product);
+                                else addToCart(product);
+                              }}
                             >
-                              X
+                              {isConfigurable ? "Customize" : "Add"}
                             </Button>
                           </Stack>
-                        </Paper>
-                      ))}
-                    </Stack>
-                  )}
+                        </Stack>
+                      </Paper>
+                    );
+                  })}
+              </Stack>
+            </Box>
+          </Grid>
 
-                  <Divider sx={{ my: 2 }} />
+          {/* 🔥 CART BAR (sticky bottom) */}
+          {cart.length > 0 && !cartOpen && (
+            <Paper
+              elevation={6}
+              sx={{
+                position: "fixed",
+                left: 12,
+                right: 12,
+                bottom: 12,
+                borderRadius: 999,
+                px: 1.5,
+                py: 1,
+                zIndex: 2000
+              }}
+            >
+              <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                <Box>
+                  <Typography sx={{ fontWeight: 900, lineHeight: 1.1 }}>
+                    Cart • {cart.length} item{cart.length === 1 ? "" : "s"}
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                    Total: {formatEUR(total)}
+                  </Typography>
+                </Box>
 
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography sx={{ fontWeight: 900, fontSize: 18 }}>Total</Typography>
-                    <Typography sx={{ fontWeight: 900, fontSize: 18 }}>
-                      {formatEUR(total)}
-                    </Typography>
-                  </Stack>
+                <Button
+                  variant="contained"
+                  sx={{ borderRadius: 999, fontWeight: 900, px: 2.2 }}
+                  onClick={() => setCartOpen(true)}
+                >
+                  Checkout
+                </Button>
+              </Stack>
+            </Paper>
+          )}
 
-                  <Divider sx={{ my: 2 }} />
-
-                  <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
-                    Pickup time
+          {/* 🧺 CART DRAWER */}
+          <Drawer
+            anchor="bottom"
+            open={cartOpen}
+            onClose={() => setCartOpen(false)}
+            PaperProps={{
+              sx: {
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                pb: 0,
+                maxHeight: "92vh"
+              }
+            }}
+          >
+            <Box sx={{ display: "flex", flexDirection: "column", height: "92vh" }}>
+              {/* HEADER */}
+              <Box sx={{ p: 2 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                    Your Cart
                   </Typography>
 
-                  <Stack spacing={1}>
-                    {pickupSlots.map((slot) => {
-                      const used = ordersCountForSlot(slot.label);
-                      const isFull = used >= slot.limit;
-                      const isPast = isSlotInPast(slot.label);
-                      const disabledSlot = isFull || isPast;
-                      const selected = pickupSlot?.label === slot.label;
-
-                      return (
-                        <Paper
-                          key={slot.label}
-                          variant="outlined"
-                          sx={{
-                            p: 1.25,
-                            borderRadius: 2,
-                            opacity: disabledSlot ? 0.5 : 1,
-                            borderWidth: selected ? 2 : 1
-                          }}
-                        >
-                          <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                            <input
-                              type="radio"
-                              name="pickup"
-                              value={slot.label}
-                              checked={selected}
-                              disabled={disabledSlot}
-                              onChange={() => {
-                                setPickupSlot(slot);
-                                setOrderPlaced(false);
-                                setOrderCode("");
-                              }}
-                            />
-                            <div>
-                              <div style={{ fontWeight: 900 }}>{slot.label}</div>
-                              <div style={{ opacity: 0.75, fontSize: 13 }}>
-                                Capacity: {used}/{slot.limit}
-                                {isFull ? " • FULL" : ""}
-                                {isPast && !isFull ? " • CLOSED" : ""}
-                              </div>
-                            </div>
-                          </label>
-                        </Paper>
-                      );
-                    })}
-                  </Stack>
-
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    sx={{ mt: 2, borderRadius: 2, py: 1.2, fontWeight: 900 }}
-                    disabled={!canPlaceOrder}
-                    onClick={placeOrder}
-                  >
-                    Pay & Place order
-                  </Button>
-
-                  {!canPlaceOrder && (
-                    <Typography sx={{ mt: 1, opacity: 0.75 }}>
-                      Add items and choose a pickup time.
-                    </Typography>
-                  )}
-
-                  {orderPlaced && (
-                    <Paper sx={{ p: 2, borderRadius: 3, mt: 2 }} variant="outlined">
-                      <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                        Order confirmed
-                      </Typography>
-                      <Typography sx={{ mt: 1 }}>
-                        Code: <b style={{ letterSpacing: 2 }}>{orderCode}</b>
-                      </Typography>
-                    </Paper>
-                  )}
-                {publicOrder && (
-  <Paper
-    variant="outlined"
-    sx={{
-      mt: 2,
-      p: 1.25,
-      borderRadius: 2,
-      borderWidth: publicOrder.status === "Gata" ? 2 : 1,
-      opacity: 0.95
-    }}
-  >
-    <Stack direction="row" alignItems="center" justifyContent="space-between">
-      <Typography sx={{ fontWeight: 900 }}>
-        Status: {publicOrder.status}
-      </Typography>
-
-      <Chip
-        label={publicOrder.status}
-        color={chipColor(publicOrder.status)}
-        icon={chipIcon(publicOrder.status)}
-        size="small"
-      />
-    </Stack>
-
-    {publicOrder.status === "Gata" && (
-      <Typography sx={{ mt: 0.5, fontWeight: 800 }}>
-        ✅ Ready for pickup!
-      </Typography>
-    )}
-  </Paper>
-)}
-                
-                </Paper>
+                  <IconButton onClick={() => setCartOpen(false)}>
+                    <CloseIcon />
+                  </IconButton>
+                </Stack>
+                <Divider sx={{ mt: 2 }} />
               </Box>
-            </Grid>
-          </Grid>
-        )}
 
-        {/* STAFF UI */}
-        {isStaff && staffAllowed && (
-          <>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2, flexWrap: "wrap" }}>
-              
+              {/* SCROLL AREA */}
+              <Box sx={{ px: 2, pb: 2, overflow: "auto" }}>
+                {cart.length === 0 ? (
+                  <Typography sx={{ opacity: 0.75 }}>Your cart is empty.</Typography>
+                ) : (
+                  <Stack spacing={1}>
+                    {cart.map((item, index) => (
+                      <Paper key={index} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          alignItems="flex-start"
+                          justifyContent="space-between"
+                        >
+                          <Box sx={{ pr: 1 }}>
+                            <Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
+                              {item.displayName || item.name}
+                            </Typography>
+                            <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                              {formatEUR(item.price)}
+                            </Typography>
+                          </Box>
 
-              <Tabs value={staffTab} onChange={(_, v) => setStaffTab(v)}>
-  <Tab label="Orders" value="orders" />
-
-  {isAdminRole && (
-    <Tab label="Products" value="products" />
-  )}
-</Tabs>
-
-              {staffTab === "orders" && (
-                <FormControlLabel
-                  sx={{ ml: "auto" }}
-                  control={
-                    <Checkbox
-                      checked={showOnlyOpen}
-                      onChange={(e) => setShowOnlyOpen(e.target.checked)}
-                    />
-                  }
-                  label="Only open orders"
-                />
-              )}
-            </Stack>
-
-            <Divider sx={{ mb: 2 }} />
-
-
-
-            {staffTab === "orders" && (
-  <>
-    <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
-      Orders (live)
-    </Typography>
-
-    {staffOrders.length === 0 && (
-      <Typography sx={{ opacity: 0.7 }}>No orders yet.</Typography>
-    )}
-
-    {staffOrders.map((order) => (
-      <Card key={order.id} sx={{ mb: 2, borderRadius: 3 }}>
-        <CardContent>
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            justifyContent="space-between"
-            flexWrap="wrap"
-          >
-            <Typography variant="h6" sx={{ fontWeight: 800 }}>
-              {order.pickupTime}
-            </Typography>
-
-            <Chip
-              icon={chipIcon(order.status)}
-              label={order.status}
-              color={chipColor(order.status)}
-              variant="filled"
-              size="small"
-            />
-
-            <Typography sx={{ fontWeight: 800, letterSpacing: 1 }}>
-              {order.code}
-            </Typography>
-          </Stack>
-
-          <Typography sx={{ mt: 1 }}>
-            <b>Total:</b> {formatEUR(order.total)}
-          </Typography>
-
-          <Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
-          {(order.items || []).map((it, idx) => (
-            <Typography key={idx} variant="body2">
-              - {it.displayName || it.name} ({formatEUR(it.price)})
-            </Typography>
-          ))}
-
-          <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap">
-            <Button variant="outlined" onClick={() => setStatus(order.id, order.code, "Nou")}>
-              Nou
-            </Button>
-            <Button variant="outlined" onClick={() => setStatus(order.id, order.code, "In lucru")}>
-              In lucru
-            </Button>
-            <Button variant="contained" onClick={() => setStatus(order.id, order.code, "Gata")}>
-              Gata
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
-    ))}
-  </>
-)}
-
-            {staffTab === "products" && isAdminRole && (
-              <>
-                <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
-                  Products {isAdminRole ? "(Admin)" : "(Staff)"}
-                </Typography>
-
-
-
-                {isAdminRole && (
-                  <Card sx={{ borderRadius: 3, mb: 2 }}>
-                    <CardContent>
-                      <Typography sx={{ fontWeight: 800, mb: 1 }}>Add product</Typography>
-
-                      <Box
-                        component="form"
-                        onSubmit={addProduct}
-                        sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}
-                      >
-                        <TextField
-                          label="Name"
-                          value={newName}
-                          onChange={(e) => setNewName(e.target.value)}
-                          size="small"
-                        />
-                        <TextField
-                          label="Price"
-                          value={newPrice}
-                          onChange={(e) => setNewPrice(e.target.value)}
-                          size="small"
-                          sx={{ width: 140 }}
-                        />
-                        <Button type="submit" variant="contained">
-                          Add
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            sx={{ borderRadius: 2, minWidth: 0, px: 1.2 }}
+                            onClick={() => removeFromCart(index)}
+                          >
+                            X
+                          </Button>
+                        </Stack>
+                      </Paper>
+                    ))}
+                  </Stack>
                 )}
 
-                {productsDb.length === 0 && <Typography sx={{ opacity: 0.7 }}>No products yet.</Typography>}
+                <Divider sx={{ my: 2 }} />
 
-                {productsDb.map((p) => (
-                  <Card key={p.id} sx={{ mb: 2, borderRadius: 3 }}>
-                    <CardContent>
-                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                        <Typography sx={{ fontWeight: 800 }}>{p.name}</Typography>
-                        <Chip
-                          size="small"
-                          label={p.active === false ? "Inactive" : "Active"}
-                          variant={p.active === false ? "outlined" : "filled"}
-                        />
-                      </Stack>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography sx={{ fontWeight: 900, fontSize: 18 }}>Total</Typography>
+                  <Typography sx={{ fontWeight: 900, fontSize: 18 }}>{formatEUR(total)}</Typography>
+                </Stack>
 
-                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }} flexWrap="wrap">
-                        <Typography variant="body2">Price:</Typography>
-                        <TextField
-                          defaultValue={p.price}
-                          size="small"
-                          sx={{ width: 140 }}
-                          onBlur={(e) => updateProductPrice(p, e.target.value)}
-                          disabled={!isAdminRole}
-                        />
+                <Divider sx={{ my: 2 }} />
 
-                        <Button variant="outlined" onClick={() => toggleProductActive(p)} disabled={!isAdminRole}>
-                          {p.active === false ? "Activate" : "Deactivate"}
-                        </Button>
-{isAdminRole && (
-  <Button
-    variant="outlined"
-    onClick={() => openEditConfig(p)}
-  >
-    Edit config
-  </Button>
-)}
+                <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
+                  Pickup time
+                </Typography>
 
-                        <Button
-                          variant="outlined"
-                          color="error"
-                          onClick={() => removeProduct(p)}
-                          disabled={!isAdminRole}
-                        >
-                          Delete
-                        </Button>
-                      </Stack>
+                <Stack spacing={1}>
+                  {pickupSlots.map((slot) => {
+                    const used = ordersCountForSlot(slot.label);
+                    const isFull = used >= slot.limit;
+                    const isPast = isSlotInPast(slot.label);
+                    const disabledSlot = isFull || isPast;
+                    const selected = pickupSlot?.label === slot.label;
 
-                      {!isAdminRole && (
-                        <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>
-                          Only Admin can edit products.
-                        </Typography>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </>
+                    return (
+                      <Paper
+                        key={slot.label}
+                        variant="outlined"
+                        sx={{
+                          p: 1.25,
+                          borderRadius: 2,
+                          opacity: disabledSlot ? 0.5 : 1,
+                          borderWidth: selected ? 2 : 1
+                        }}
+                      >
+                        <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          <input
+                            type="radio"
+                            name="pickup"
+                            value={slot.label}
+                            checked={selected}
+                            disabled={disabledSlot}
+                            onChange={() => {
+                              setPickupSlot(slot);
+                              setOrderCode("");
+                            }}
+                          />
+                          <div>
+                            <div style={{ fontWeight: 900 }}>{slot.label}</div>
+                            <div style={{ opacity: 0.75, fontSize: 13 }}>
+                              Capacity: {used}/{slot.limit}
+                              {isFull ? " • FULL" : ""}
+                              {isPast && !isFull ? " • CLOSED" : ""}
+                            </div>
+                          </div>
+                        </label>
+                      </Paper>
+                    );
+                  })}
+                </Stack>
+              </Box>
+
+              {/* STICKY FOOTER */}
+              <Box
+                sx={{
+                  p: 2,
+                  pt: 1.5,
+                  borderTop: "1px solid rgba(0,0,0,0.08)",
+                  backgroundColor: "background.paper"
+                }}
+              >
+                <Button
+                  fullWidth
+                  variant="contained"
+                  sx={{ borderRadius: 2, py: 1.2, fontWeight: 900 }}
+                  disabled={!canPlaceOrder}
+                  onClick={async () => {
+                    await placeOrder();
+                    setCartOpen(false);
+                  }}
+                >
+                  Pay & Place order
+                </Button>
+
+                {!canPlaceOrder && (
+                  <Typography sx={{ mt: 1, opacity: 0.75 }}>
+                    Add items and choose a pickup time.
+                  </Typography>
+                )}
+
+                {publicOrder && (
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      mt: 1.5,
+                      p: 1.25,
+                      borderRadius: 2,
+                      borderWidth: publicOrder.status === "Gata" ? 2 : 1,
+                      opacity: 0.95,
+                      background:
+                        publicOrder.status === "Gata"
+                          ? "#e8f5e9"
+                          : publicOrder.status === "In lucru"
+                          ? "#fff8e1"
+                          : "#e3f2fd"
+                    }}
+                  >
+                    <Stack direction="row" alignItems="center" justifyContent="space-between">
+                      <Typography sx={{ fontWeight: 900 }}>Status: {publicOrder.status}</Typography>
+
+                      <Chip
+                        label={publicOrder.status}
+                        color={chipColor(publicOrder.status)}
+                        icon={chipIcon(publicOrder.status)}
+                        size="small"
+                      />
+                    </Stack>
+
+                    {publicOrder.status === "Gata" && (
+                      <Typography sx={{ mt: 0.5, fontWeight: 800 }}>✅ Ready for pickup!</Typography>
+                    )}
+                  </Paper>
+                )}
+              </Box>
+            </Box>
+          </Drawer>
+        </Grid>
+      )}
+
+      {/* STAFF UI */}
+      {isStaff && staffAllowed && (
+        <Box>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2, flexWrap: "wrap" }}>
+            <Tabs value={staffTab} onChange={(_, v) => setStaffTab(v)}>
+              <Tab label="Orders" value="orders" />
+              {isAdminRole && <Tab label="Products" value="products" />}
+            </Tabs>
+
+            {staffTab === "orders" && (
+              <FormControlLabel
+                sx={{ ml: "auto" }}
+                control={
+                  <Checkbox
+                    checked={showOnlyOpen}
+                    onChange={(e) => setShowOnlyOpen(e.target.checked)}
+                  />
+                }
+                label="Only open orders"
+              />
             )}
-          </>
-        )}
-      </Container>
+          </Stack>
 
-<Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="sm">
-  <DialogTitle sx={{ fontWeight: 900 }}>
-    Edit config: {editProduct?.name || ""}
-  </DialogTitle>
+          <Divider sx={{ mb: 2 }} />
 
-  <DialogContent dividers>
-    <Stack spacing={2}>
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={cfgSaladsEnabled}
-            onChange={(e) => setCfgSaladsEnabled(e.target.checked)}
+          {staffTab === "orders" && (
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
+                Orders (live)
+              </Typography>
+
+              {staffOrders.length === 0 && (
+                <Typography sx={{ opacity: 0.7 }}>No orders yet.</Typography>
+              )}
+
+              {staffOrders.map((order) => (
+                <Card key={order.id} sx={{ mb: 2, borderRadius: 3 }}>
+                  <CardContent>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      alignItems="center"
+                      justifyContent="space-between"
+                      flexWrap="wrap"
+                    >
+                      <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                        {order.pickupTime}
+                      </Typography>
+
+                      <Chip
+                        icon={chipIcon(order.status)}
+                        label={order.status}
+                        color={chipColor(order.status)}
+                        variant="filled"
+                        size="small"
+                      />
+
+                      <Typography sx={{ fontWeight: 800, letterSpacing: 1 }}>
+                        {order.code}
+                      </Typography>
+                    </Stack>
+
+                    <Typography sx={{ mt: 1 }}>
+                      <b>Total:</b> {formatEUR(order.total)}
+                    </Typography>
+
+                    <Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
+                    {(order.items || []).map((it, idx) => (
+                      <Typography key={idx} variant="body2">
+                        - {it.displayName || it.name} ({formatEUR(it.price)})
+                      </Typography>
+                    ))}
+
+                    <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap">
+                      <Button variant="outlined" onClick={() => setStatus(order.id, order.code, "Nou")}>
+                        Nou
+                      </Button>
+                      <Button variant="outlined" onClick={() => setStatus(order.id, order.code, "In lucru")}>
+                        In lucru
+                      </Button>
+                      <Button variant="contained" onClick={() => setStatus(order.id, order.code, "Gata")}>
+                        Gata
+                      </Button>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          )}
+
+          {staffTab === "products" && isAdminRole && (
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
+                Products (Admin)
+              </Typography>
+
+              <Card sx={{ borderRadius: 3, mb: 2 }}>
+                <CardContent>
+                  <Typography sx={{ fontWeight: 800, mb: 1 }}>Add product</Typography>
+
+                  <Box
+                    component="form"
+                    onSubmit={addProduct}
+                    sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}
+                  >
+                    <TextField
+                      label="Name"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      size="small"
+                    />
+                    <TextField
+                      label="Price"
+                      value={newPrice}
+                      onChange={(e) => setNewPrice(e.target.value)}
+                      size="small"
+                      sx={{ width: 140 }}
+                    />
+                    <Button type="submit" variant="contained">
+                      Add
+                    </Button>
+                  </Box>
+                </CardContent>
+              </Card>
+
+              {productsDb.length === 0 && (
+                <Typography sx={{ opacity: 0.7 }}>No products yet.</Typography>
+              )}
+
+              {productsDb.map((p) => (
+                <Card key={p.id} sx={{ mb: 2, borderRadius: 3 }}>
+                  <CardContent>
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                      <Typography sx={{ fontWeight: 800 }}>{p.name}</Typography>
+                      <Chip
+                        size="small"
+                        label={p.active === false ? "Inactive" : "Active"}
+                        variant={p.active === false ? "outlined" : "filled"}
+                      />
+                    </Stack>
+
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }} flexWrap="wrap">
+                      <Typography variant="body2">Price:</Typography>
+                      <TextField
+                        defaultValue={p.price}
+                        size="small"
+                        sx={{ width: 140 }}
+                        onBlur={(e) => updateProductPrice(p, e.target.value)}
+                        disabled={!isAdminRole}
+                      />
+
+                      <Button variant="outlined" onClick={() => toggleProductActive(p)} disabled={!isAdminRole}>
+                        {p.active === false ? "Activate" : "Deactivate"}
+                      </Button>
+
+                      {isAdminRole && (
+                        <Button variant="outlined" onClick={() => openEditConfig(p)}>
+                          Edit config
+                        </Button>
+                      )}
+
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        onClick={() => removeProduct(p)}
+                        disabled={!isAdminRole}
+                      >
+                        Delete
+                      </Button>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          )}
+        </Box>
+      )}
+    </Container>
+
+    {/* EDIT CONFIG DIALOG */}
+    <Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="sm">
+      <DialogTitle sx={{ fontWeight: 900 }}>
+        Edit config: {editProduct?.name || ""}
+      </DialogTitle>
+
+      <DialogContent dividers>
+        <Stack spacing={2}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={cfgSaladsEnabled}
+                onChange={(e) => setCfgSaladsEnabled(e.target.checked)}
+              />
+            }
+            label="Enable salads"
           />
-        }
-        label="Enable salads"
-      />
 
-      <Stack direction="row" spacing={1}>
-        <TextField
-          label="Included salads"
-          value={cfgSaladsIncluded}
-          onChange={(e) => setCfgSaladsIncluded(e.target.value)}
-          fullWidth
-        />
-        <TextField
-          label="Extra price (€)"
-          value={cfgSaladsExtraPrice}
-          onChange={(e) => setCfgSaladsExtraPrice(e.target.value)}
-          fullWidth
-        />
-      </Stack>
+          <Stack direction="row" spacing={1}>
+            <TextField
+              label="Included salads"
+              value={cfgSaladsIncluded}
+              onChange={(e) => setCfgSaladsIncluded(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              label="Extra price (€)"
+              value={cfgSaladsExtraPrice}
+              onChange={(e) => setCfgSaladsExtraPrice(e.target.value)}
+              fullWidth
+            />
+          </Stack>
 
-      <TextField
-        label="Salads list (one per line)"
-        value={cfgSaladsItemsText}
-        onChange={(e) => setCfgSaladsItemsText(e.target.value)}
-        multiline
-        minRows={6}
-        fullWidth
-      />
+          <TextField
+            label="Salads list (one per line)"
+            value={cfgSaladsItemsText}
+            onChange={(e) => setCfgSaladsItemsText(e.target.value)}
+            multiline
+            minRows={6}
+            fullWidth
+          />
 
-      <Divider />
+          <Divider />
 
-      <TextField
-        label="Options (one per line): key|label|type(single/multi)|required(true/false)|items(comma)"
-        value={cfgOptionsText}
-        onChange={(e) => setCfgOptionsText(e.target.value)}
-        multiline
-        minRows={6}
-        fullWidth
-        placeholder={`chicken|Chicken|single|true|Butter,Hot (Spicy)\nsauce|Sauce|multi|false|Mayo,Ketchup`}
-      />
-    </Stack>
-  </DialogContent>
+          <TextField
+            label="Options (one per line): key|label|type(single/multi)|required(true/false)|items(comma)"
+            value={cfgOptionsText}
+            onChange={(e) => setCfgOptionsText(e.target.value)}
+            multiline
+            minRows={6}
+            fullWidth
+          />
+        </Stack>
+      </DialogContent>
 
-  <DialogActions sx={{ p: 2 }}>
-    <Button variant="outlined" onClick={() => setEditOpen(false)}>
-      Cancel
-    </Button>
-    <Button variant="contained" sx={{ fontWeight: 900 }} onClick={saveEditConfig}>
-      Save
-    </Button>
-  </DialogActions>
-</Dialog>
+      <DialogActions sx={{ p: 2 }}>
+        <Button variant="outlined" onClick={() => setEditOpen(false)}>
+          Cancel
+        </Button>
+        <Button variant="contained" sx={{ fontWeight: 900 }} onClick={saveEditConfig}>
+          Save
+        </Button>
+      </DialogActions>
+    </Dialog>
 
-
-      {/* SNACKBAR */}
-      <Snackbar
-        open={snack.open}
-        autoHideDuration={1400}
+    {/* SNACKBAR */}
+    <Snackbar
+      open={snack.open}
+      autoHideDuration={1400}
+      onClose={() => setSnack({ open: false, msg: "" })}
+      anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      sx={{ mt: 10 }}
+    >
+      <Alert
+        severity="success"
+        variant="filled"
         onClose={() => setSnack({ open: false, msg: "" })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        sx={{ fontWeight: 800 }}
       >
-        <Alert severity="success" variant="filled" onClose={() => setSnack({ open: false, msg: "" })}>
-          {snack.msg}
-        </Alert>
-      </Snackbar>
+        {snack.msg}
+      </Alert>
+    </Snackbar>
 
-      {/* CONFIG DIALOG */}
+    {/* CONFIG DIALOG */}
       <Dialog open={configOpen} onClose={() => setConfigOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle sx={{ fontWeight: 900 }}>Customize: {configProduct?.name || ""}</DialogTitle>
 
@@ -1315,6 +1404,7 @@ useEffect(() => {
           </Button>
         </DialogActions>
       </Dialog>
-    </>
-  );
+
+  </>
+);
 }
