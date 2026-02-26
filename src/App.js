@@ -341,14 +341,14 @@ const [publicOrders, setPublicOrders] = useState([]);
   // ===== CART HELPERS =====
   function addToCart(item) {
     
-    setOrderCode("");
+    
     setCart((prev) => [...prev, item]);
     setSnack({ open: true, msg: "Added to cart" });
   }
 
   function removeFromCart(indexToRemove) {
     
-    setOrderCode("");
+    
     setCart((prev) => prev.filter((_, i) => i !== indexToRemove));
   }
 
@@ -402,7 +402,8 @@ await setDoc(doc(db, "order_public", code), {
   updatedAt: serverTimestamp()
 });
     setOrderCode(code);
-    
+    setSnack({ open: true, msg: `Order placed • Code: ${code}` });
+console.log("ORDER CODE =", code);
     setCart([]);
     setPickupSlot(null);
   }
@@ -582,7 +583,8 @@ useEffect(() => {
   return () => unsub();
 }, [orderCode, lastPublicStatus]);
 
-
+const codeToShow = publicOrder?.code || orderCode;
+const statusToShow = publicOrder?.status || null;
 
 
  return (
@@ -651,7 +653,41 @@ useEffect(() => {
               <Typography sx={{ opacity: 0.75, mb: 2 }}>
                 Tap an item to add it. Some items can be customized.
               </Typography>
+{codeToShow && (
+  <Paper
+    variant="outlined"
+    sx={{
+      p: 1.25,
+      borderRadius: 3,
+      mb: 2,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 1.5
+    }}
+  >
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={{ fontWeight: 900 }}>
+        Order code: <span style={{ letterSpacing: 2, fontSize: 18 }}>
+  {codeToShow}
+</span>
+      </Typography>
+      <Typography variant="body2" sx={{ opacity: 0.75 }}>
+        Keep this code to track your order status.
+      </Typography>
+    </Box>
 
+    {statusToShow && (
+      <Chip
+        label={statusToShow}
+        color={chipColor(statusToShow)}
+        icon={chipIcon(statusToShow)}
+        size="small"
+        sx={{ fontWeight: 900, flexShrink: 0 }}
+      />
+    )}
+  </Paper>
+)}
               {/* Categories (top buttons) */}
               <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
                 {CATEGORIES.map((c) => (
@@ -913,7 +949,7 @@ useEffect(() => {
                             disabled={disabledSlot}
                             onChange={() => {
                               setPickupSlot(slot);
-                              setOrderCode("");
+                              
                             }}
                           />
                           <div>
