@@ -734,7 +734,7 @@ useEffect(() => {
           </Grid>
 
           {/* 🔥 CART BAR (sticky bottom) */}
-          {cart.length > 0 && !cartOpen && (
+          {cart.length > 0 && !cartOpen && !configOpen && (
             <Paper
               elevation={6}
               sx={{
@@ -745,7 +745,7 @@ useEffect(() => {
                 borderRadius: 999,
                 px: 1.5,
                 py: 1,
-                zIndex: 2000
+                zIndex: (theme) => theme.zIndex.modal - 1
               }}
             >
               <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
