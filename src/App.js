@@ -201,7 +201,8 @@ async function staffLogout() {
   const [activeCategory, setActiveCategory] = useState("rolls"); // default deschis: Rolls
   const [orderCode, setOrderCode] = useState("");
   const [snack, setSnack] = useState({ open: false, msg: "" });
-const CATEGORIES = [
+
+  const CATEGORIES = [
   { key: "rolls", label: "ROLLS" },
   { key: "sides", label: "SIDES" },
   { key: "drinks", label: "DRINKS" }
@@ -668,12 +669,14 @@ useEffect(() => {
               {/* Products list (ONLY active category) */}
               <Stack spacing={1.2}>
                 {productsDb
-  .filter((p) => p.active !== false)
   .filter((p) => getCategory(p) === activeCategory)
   .map((product) => {
     const isConfigurable =
       !!product?.config &&
-      (product.config?.salads?.enabled || (product.config?.options?.length ?? 0) > 0);
+      (product.config?.salads?.enabled ||
+        (product.config?.options?.length ?? 0) > 0);
+
+    const isOut = product.active === false;
 
     return (
       <Fade in timeout={300} key={product.id}>
@@ -682,16 +685,37 @@ useEffect(() => {
           sx={{
             p: 1.25,
             borderRadius: 3,
-            transition: "all 0.2s ease",
-            "&:hover": {
-              transform: "scale(1.02)",
-              boxShadow: 3
-            },
-            "&:active": {
-              transform: "scale(0.98)"
-            }
+    position: "relative", 
+    opacity: isOut ? 0.55 : 1,
+    transition: "all 0.2s ease",
+            ...(isOut
+              ? {}
+              : {
+                  "&:hover": {
+                    transform: "scale(1.02)",
+                    boxShadow: 3
+                  },
+                  "&:active": {
+                    transform: "scale(0.98)"
+                  }
+                })
           }}
         >
+          {isOut && (
+  <Chip
+  label="Out of stock"
+  size="small"
+  sx={{
+    position: "absolute",
+    top: -10,
+    right: 10,
+    fontWeight: 800,
+    bgcolor: "#111",
+    color: "#fff",
+    zIndex: 2
+  }}
+/>
+)}
           <Stack
             direction="row"
             alignItems="center"
@@ -705,25 +729,28 @@ useEffect(() => {
 
               <Typography variant="body2" sx={{ opacity: 0.7 }}>
                 {formatEUR(product.price)}
+                
               </Typography>
             </Box>
 
-            <Button
-              variant={isConfigurable ? "outlined" : "contained"}
-              sx={{
-                borderRadius: 999,
-                fontWeight: 900,
-                px: 2,
-                textTransform: "none",
-                boxShadow: isConfigurable ? 0 : 2
-              }}
-              onClick={() => {
-                if (isConfigurable) openConfigurator(product);
-                else addToCart(product);
-              }}
-            >
-              {isConfigurable ? "Customize →" : "Add +"}
-            </Button>
+            {!isOut && (
+  <Button
+    variant={isConfigurable ? "outlined" : "contained"}
+    sx={{
+      borderRadius: 999,
+      fontWeight: 900,
+      px: 2,
+      textTransform: "none",
+      boxShadow: isConfigurable ? 0 : 2
+    }}
+    onClick={() => {
+      if (isConfigurable) openConfigurator(product);
+      else addToCart(product);
+    }}
+  >
+    {isConfigurable ? "Customize →" : "Add +"}
+  </Button>
+)}
           </Stack>
         </Paper>
       </Fade>
@@ -806,21 +833,15 @@ useEffect(() => {
                   <Stack spacing={1}>
                     {cart.map((item, index) => (
                       <Paper
-  key={item.id ?? index}
-  variant="outlined"
-  sx={{
-    p: 1.25,
-    borderRadius: 3,
-    transition: "all 0.2s ease",
-    "&:hover": {
-      transform: "scale(1.02)",
-      boxShadow: 3
-    },
-    "&:active": {
-      transform: "scale(0.98)"
-    }
-  }}
->
+    key={item.id ?? index}
+    variant="outlined"
+    sx={{
+      p: 1.25,
+      borderRadius: 3,
+      transition: "all 0.2s ease",
+      "&:active": { transform: "scale(0.98)" }
+    }}
+  >
                         <Stack
                           direction="row"
                           spacing={1}
@@ -1136,10 +1157,11 @@ useEffect(() => {
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                       <Typography sx={{ fontWeight: 800 }}>{p.name}</Typography>
                       <Chip
-                        size="small"
-                        label={p.active === false ? "Inactive" : "Active"}
-                        variant={p.active === false ? "outlined" : "filled"}
-                      />
+  size="small"
+  label={p.active === false ? "Out of stock" : "Available"}
+  color={p.active === false ? "default" : "success"}
+  variant={p.active === false ? "outlined" : "filled"}
+/>
                     </Stack>
 
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }} flexWrap="wrap">
@@ -1164,9 +1186,15 @@ useEffect(() => {
     <MenuItem value="sides">SIDES</MenuItem>
     <MenuItem value="drinks">DRINKS</MenuItem>
   </TextField>
-                      <Button variant="outlined" onClick={() => toggleProductActive(p)} disabled={!isAdminRole}>
-                        {p.active === false ? "Activate" : "Deactivate"}
-                      </Button>
+                      <Button
+  variant={p.active === false ? "contained" : "outlined"}
+  color={p.active === false ? "success" : "warning"}
+  onClick={() => toggleProductActive(p)}
+  disabled={!isAdminRole}
+  sx={{ fontWeight: 900 }}
+>
+  {p.active === false ? "Back in stock" : "Out of stock"}
+</Button>
 
                       {isAdminRole && (
                         <Button variant="outlined" onClick={() => openEditConfig(p)}>
