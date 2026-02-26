@@ -40,9 +40,10 @@ import {
   DialogActions,
   ToggleButton,
   ToggleButtonGroup,
-  
+  MenuItem,
   Snackbar,
-  Alert
+  Alert,
+  Fade
 } from "@mui/material";
 
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -205,7 +206,9 @@ const CATEGORIES = [
   { key: "sides", label: "SIDES" },
   { key: "drinks", label: "DRINKS" }
 ];
-
+useEffect(() => {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}, [activeCategory]);
   // ===== FIRESTORE STATE =====
   const [orders, setOrders] = useState([]);
   const [productsDb, setProductsDb] = useState([]);
@@ -220,7 +223,7 @@ const [publicOrders, setPublicOrders] = useState([]);
 }, [isAdminRole, staffTab]);
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("");
-
+  const [newCategory, setNewCategory] = useState("rolls");
   // ===== CONFIGURATOR STATE =====
   const [configOpen, setConfigOpen] = useState(false);
   const [configProduct, setConfigProduct] = useState(null);
@@ -422,15 +425,21 @@ await setDoc(doc(db, "order_public", code), {
     if (!Number.isFinite(price) || price <= 0) return alert("Pret invalid");
 
     await addDoc(collection(db, "products"), {
-      name,
-      price,
-      active: true,
-      createdAt: serverTimestamp()
-    });
+  name,
+  price,
+  category: newCategory,   // ✅ IMPORTANT
+  active: true,
+  createdAt: serverTimestamp()
+});
 
     setNewName("");
     setNewPrice("");
+    setNewCategory("rolls");
   }
+
+async function updateProductCategory(product, category) {
+  await updateDoc(doc(db, "products", product.id), { category });
+}
 
   async function toggleProductActive(product) {
     const nextActive = product.active === false ? true : false;
@@ -659,67 +668,67 @@ useEffect(() => {
               {/* Products list (ONLY active category) */}
               <Stack spacing={1.2}>
                 {productsDb
-                  .filter((p) => p.active !== false)
-                  .filter((p) => getCategory(p) === activeCategory)
-                  .map((product) => {
-                    const isConfigurable =
-                      !!product?.config &&
-                      (product.config?.salads?.enabled || (product.config?.options?.length ?? 0) > 0);
+  .filter((p) => p.active !== false)
+  .filter((p) => getCategory(p) === activeCategory)
+  .map((product) => {
+    const isConfigurable =
+      !!product?.config &&
+      (product.config?.salads?.enabled || (product.config?.options?.length ?? 0) > 0);
 
-                      <Button
-  variant="contained"
-  sx={{ borderRadius: 999, fontWeight: 900, px: 2 }}
-  onClick={() => {
-    console.log("CLICK", product.name, "isConfigurable=", isConfigurable, product.config);
-    if (isConfigurable) openConfigurator(product);
-    else addToCart(product);
-  }}
->
-  {isConfigurable ? "Customize" : "Add"}
-</Button>
-                    return (
-                      <Paper key={product.id} variant="outlined" sx={{ p: 1.25, borderRadius: 3 }}>
-                        <Stack
-                          direction="row"
-                          alignItems="center"
-                          justifyContent="space-between"
-                          spacing={2}
-                        >
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography sx={{ fontWeight: 900, lineHeight: 1.1 }} noWrap>
-                              {product.name}
-                            </Typography>
-                            {isConfigurable ? (
-                              <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                                Tap to customize
-                              </Typography>
-                            ) : (
-                              <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                                {formatEUR(product.price)}
-                              </Typography>
-                            )}
-                          </Box>
+    return (
+      <Fade in timeout={300} key={product.id}>
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 1.25,
+            borderRadius: 3,
+            transition: "all 0.2s ease",
+            "&:hover": {
+              transform: "scale(1.02)",
+              boxShadow: 3
+            },
+            "&:active": {
+              transform: "scale(0.98)"
+            }
+          }}
+        >
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            spacing={2}
+          >
+            <Box>
+              <Typography sx={{ fontWeight: 900 }}>
+                {product.name}
+              </Typography>
 
-                          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
-                            <Typography sx={{ fontWeight: 900 }}>
-                              {formatEUR(product.price)}
-                            </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                {formatEUR(product.price)}
+              </Typography>
+            </Box>
 
-                            <Button
-                              variant={isConfigurable ? "outlined" : "contained"}
-                              sx={{ borderRadius: 999, fontWeight: 900, px: 2 }}
-                              onClick={() => {
-                                if (isConfigurable) openConfigurator(product);
-                                else addToCart(product);
-                              }}
-                            >
-                              {isConfigurable ? "Customize" : "Add"}
-                            </Button>
-                          </Stack>
-                        </Stack>
-                      </Paper>
-                    );
-                  })}
+            <Button
+              variant={isConfigurable ? "outlined" : "contained"}
+              sx={{
+                borderRadius: 999,
+                fontWeight: 900,
+                px: 2,
+                textTransform: "none",
+                boxShadow: isConfigurable ? 0 : 2
+              }}
+              onClick={() => {
+                if (isConfigurable) openConfigurator(product);
+                else addToCart(product);
+              }}
+            >
+              {isConfigurable ? "Customize →" : "Add +"}
+            </Button>
+          </Stack>
+        </Paper>
+      </Fade>
+    );
+  })}
               </Stack>
             </Box>
           </Grid>
@@ -796,7 +805,22 @@ useEffect(() => {
                 ) : (
                   <Stack spacing={1}>
                     {cart.map((item, index) => (
-                      <Paper key={index} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+                      <Paper
+  key={item.id ?? index}
+  variant="outlined"
+  sx={{
+    p: 1.25,
+    borderRadius: 3,
+    transition: "all 0.2s ease",
+    "&:hover": {
+      transform: "scale(1.02)",
+      boxShadow: 3
+    },
+    "&:active": {
+      transform: "scale(0.98)"
+    }
+  }}
+>
                         <Stack
                           direction="row"
                           spacing={1}
@@ -1026,7 +1050,18 @@ useEffect(() => {
                       </Typography>
                     ))}
 
-                    <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap">
+                    <Box
+  sx={{
+    position: "sticky",
+    top: 64,
+    zIndex: 10,
+    bgcolor: "background.paper",
+    pb: 1,
+    mb: 2
+  }}
+>
+  <Stack direction="row" spacing={1} sx={{ overflowX: "auto" }}>
+    
                       <Button variant="outlined" onClick={() => setStatus(order.id, order.code, "Nou")}>
                         Nou
                       </Button>
@@ -1037,6 +1072,7 @@ useEffect(() => {
                         Gata
                       </Button>
                     </Stack>
+                    </Box>
                   </CardContent>
                 </Card>
               ))}
@@ -1064,6 +1100,18 @@ useEffect(() => {
                       onChange={(e) => setNewName(e.target.value)}
                       size="small"
                     />
+                    <TextField
+  select
+  label="Category"
+  value={newCategory}
+  onChange={(e) => setNewCategory(e.target.value)}
+  size="small"
+  sx={{ width: 160 }}
+>
+  <MenuItem value="rolls">ROLLS</MenuItem>
+  <MenuItem value="sides">SIDES</MenuItem>
+  <MenuItem value="drinks">DRINKS</MenuItem>
+</TextField>
                     <TextField
                       label="Price"
                       value={newPrice}
@@ -1103,7 +1151,19 @@ useEffect(() => {
                         onBlur={(e) => updateProductPrice(p, e.target.value)}
                         disabled={!isAdminRole}
                       />
-
+<TextField
+    select
+    label="Category"
+    size="small"
+    value={getCategory(p)}
+    sx={{ width: 160 }}
+    onChange={(e) => updateProductCategory(p, e.target.value)}
+    disabled={!isAdminRole}
+  >
+    <MenuItem value="rolls">ROLLS</MenuItem>
+    <MenuItem value="sides">SIDES</MenuItem>
+    <MenuItem value="drinks">DRINKS</MenuItem>
+  </TextField>
                       <Button variant="outlined" onClick={() => toggleProductActive(p)} disabled={!isAdminRole}>
                         {p.active === false ? "Activate" : "Deactivate"}
                       </Button>
