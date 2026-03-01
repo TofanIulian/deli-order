@@ -159,7 +159,431 @@ const staffAllowed = isStaff && !!authUser;
 // admin = doar emailurile din listă
 const isAdminRole = !!authUser?.email && ADMIN_EMAILS.includes(authUser.email);
  
+function addDaysISO(isoDate, deltaDays) {
+  // isoDate: "YYYY-MM-DD"
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + deltaDays);
+  return toLocalISODate(dt);
+}
 
+function ReportsPanel({ orders }) {
+  const todayStr = toLocalISODate(new Date());
+
+  const [fromDate, setFromDate] = useState(todayStr);
+  const [toDate, setToDate] = useState(todayStr);
+
+  const filtered = useMemo(() => {
+    const list = Array.isArray(orders) ? orders : [];
+    return list.filter((o) => {
+      const d = o.pickupDate || ""; // "YYYY-MM-DD"
+      if (!d) return false;
+      return d >= fromDate && d <= toDate;
+    });
+  }, [orders, fromDate, toDate]);
+
+  const totalOrders = filtered.length;
+  const totalRevenue = filtered.reduce((s, o) => s + Number(o.total || 0), 0);
+const avgOrder = totalOrders === 0 ? 0 : totalRevenue / totalOrders;
+
+  const statusCount = useMemo(() => {
+    const map = { Nou: 0, "In lucru": 0, Gata: 0, Other: 0 };
+    filtered.forEach((o) => {
+      const st = o.status || "Other";
+      if (map[st] === undefined) map.Other += 1;
+      else map[st] += 1;
+    });
+    return map;
+  }, [filtered]);
+
+  const topProducts = useMemo(() => {
+    const m = new Map();
+    filtered.forEach((o) => {
+      (o.items || []).forEach((it) => {
+        const name = it.name || it.displayName || "Unknown";
+        m.set(name, (m.get(name) || 0) + 1);
+      });
+    });
+
+    return Array.from(m.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12);
+  }, [filtered]);
+
+const topProductsRevenue = useMemo(() => {
+  const m = new Map();
+
+  filtered.forEach((o) => {
+    (o.items || []).forEach((it) => {
+      const name = it.name || it.displayName || "Unknown";
+      const value = Number(it.price || 0);
+
+      m.set(name, (m.get(name) || 0) + value);
+    });
+  });
+
+  return Array.from(m.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12);
+}, [filtered]);
+
+  const topSlots = useMemo(() => {
+    const m = new Map();
+    filtered.forEach((o) => {
+      const slot = o.pickupTime || "Unknown";
+      m.set(slot, (m.get(slot) || 0) + 1);
+    });
+    return Array.from(m.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+  }, [filtered]);
+
+  function exportCSV() {
+  const rows = [];
+
+  // Header "report"
+  rows.push(["REPORT"]);
+  rows.push(["From", fromDate, "To", toDate]);
+  rows.push(["Orders", String(totalOrders), "Revenue", String(Number(totalRevenue || 0).toFixed(2))]);
+  rows.push([]);
+
+  // Orders table
+  rows.push(["ORDERS"]);
+  rows.push(["code", "pickupDate", "pickupTime", "status", "total", "itemsCount"]);
+  filtered.forEach((o) => {
+    rows.push([
+      o.code || "",
+      o.pickupDate || "",
+      o.pickupTime || "",
+      o.status || "",
+      String(Number(o.total || 0).toFixed(2)),
+      String((o.items || []).length)
+    ]);
+  });
+  rows.push([]);
+
+  // Top products (qty)
+  rows.push(["TOP PRODUCTS (QTY)"]);
+  rows.push(["product", "qty"]);
+  topProducts.forEach(([name, qty]) => rows.push([name, String(qty)]));
+  rows.push([]);
+
+  // Top products (revenue)
+  rows.push(["TOP PRODUCTS (REVENUE)"]);
+  rows.push(["product", "revenue"]);
+  topProductsRevenue.forEach(([name, value]) =>
+    rows.push([name, String(Number(value || 0).toFixed(2))])
+  );
+
+  const csv = rows.map((r) => r.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `report_${fromDate}_to_${toDate}.csv`;
+  a.click();
+
+  URL.revokeObjectURL(url);
+  }
+function exportPDF() {
+  const htmlTopQty = topProducts
+    .map(([name, qty]) => `<tr><td>${escapeHtml(name)}</td><td style="text-align:right;font-weight:700;">${qty}</td></tr>`)
+    .join("");
+
+  const htmlTopRev = topProductsRevenue
+    .map(([name, value]) => `<tr><td>${escapeHtml(name)}</td><td style="text-align:right;font-weight:700;">${escapeHtml(formatEUR(value))}</td></tr>`)
+    .join("");
+
+  const htmlOrders = filtered
+    .map((o) => `
+      <tr>
+        <td>${escapeHtml(o.code)}</td>
+        <td>${escapeHtml(o.pickupDate)}</td>
+        <td>${escapeHtml(o.pickupTime)}</td>
+        <td>${escapeHtml(o.status)}</td>
+        <td style="text-align:right;font-weight:700;">${escapeHtml(formatEUR(o.total || 0))}</td>
+      </tr>
+    `)
+    .join("");
+
+  const docHtml = `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Report ${escapeHtml(fromDate)} to ${escapeHtml(toDate)}</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    body { font-family: Arial, sans-serif; color: #111; }
+    h1 { font-size: 18px; margin: 0 0 6px; }
+    .muted { opacity: 0.75; font-size: 12px; margin-bottom: 12px; }
+    .cards { display: flex; gap: 10px; margin: 12px 0 14px; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 10px; min-width: 160px; }
+    .label { font-size: 12px; opacity: 0.75; }
+    .value { font-size: 18px; font-weight: 900; margin-top: 4px; }
+    h2 { font-size: 14px; margin: 16px 0 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #eee; padding: 6px 4px; font-size: 12px; }
+    th { text-align: left; font-size: 12px; opacity: 0.8; }
+    .twoCol { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Deli Order — Report</h1>
+  <div class="muted">Range: <b>${escapeHtml(fromDate)}</b> → <b>${escapeHtml(toDate)}</b></div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Orders</div><div class="value">${totalOrders}</div></div>
+    <div class="card"><div class="label">Revenue</div><div class="value">${escapeHtml(formatEUR(totalRevenue))}</div></div>
+  </div>
+
+  <div class="twoCol">
+    <div>
+      <h2>Top products (Qty)</h2>
+      <table>
+        <thead><tr><th>Product</th><th style="text-align:right;">Qty</th></tr></thead>
+        <tbody>${htmlTopQty || `<tr><td colspan="2" class="muted">No data</td></tr>`}</tbody>
+      </table>
+    </div>
+
+    <div>
+      <h2>Top products (Revenue)</h2>
+      <table>
+        <thead><tr><th>Product</th><th style="text-align:right;">Revenue</th></tr></thead>
+        <tbody>${htmlTopRev || `<tr><td colspan="2" class="muted">No data</td></tr>`}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2>Orders</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Code</th><th>Date</th><th>Slot</th><th>Status</th><th style="text-align:right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${htmlOrders || `<tr><td colspan="5" class="muted">No orders in selected range</td></tr>`}
+    </tbody>
+  </table>
+
+  <script>
+    window.onload = () => { window.print(); };
+  </script>
+</body>
+</html>`;
+
+  const w = window.open("", "_blank", "width=900,height=700");
+  w.document.open();
+  w.document.write(docHtml);
+  w.document.close();
+}
+
+    
+    function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+    
+
+  return (
+  <Box>
+    <Typography variant="h5" sx={{ fontWeight: 900, mb: 2 }}>
+      Reports
+    </Typography>
+
+    <Typography sx={{ opacity: 0.7, mb: 2 }}>
+      Showing: <b>{fromDate}</b> → <b>{toDate}</b>
+    </Typography>
+
+    
+    {filtered.length === 0 && (
+      <Alert severity="info" sx={{ mb: 2 }}>
+        No orders in the selected date range.
+      </Alert>
+    )}
+
+      <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, mb: 2 }}>
+        <Stack direction="row" spacing={1.5} flexWrap="wrap" alignItems="center">
+          <TextField
+            label="From"
+            type="date"
+            size="small"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+          <TextField
+            label="To"
+            type="date"
+            size="small"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setFromDate(todayStr);
+              setToDate(todayStr);
+            }}
+          >
+            Today
+          </Button>
+
+<Button
+  variant="outlined"
+  onClick={() => {
+    console.log("CLICK YESTERDAY");
+    const y = addDaysISO(todayStr, -1);
+    console.log("YESTERDAY =", y);
+    setFromDate(y);
+    setToDate(y);
+  }}
+>
+  Yesterday
+</Button>
+
+<Button
+  variant="outlined"
+  onClick={() => {
+    const from = addDaysISO(todayStr, -6); // last 7 days incl. today
+    setFromDate(from);
+    setToDate(todayStr);
+  }}
+>
+  Last 7 days
+</Button>
+
+          <Button variant="contained" onClick={exportCSV} sx={{ fontWeight: 900, ml: "auto" }}>
+            Export CSV
+          </Button>
+          <Button variant="outlined" onClick={exportPDF}>
+  Export PDF
+</Button>
+        </Stack>
+      </Paper>
+
+      <Stack direction="row" spacing={2} flexWrap="wrap" sx={{ mb: 2 }}>
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, minWidth: 220 }}>
+          <Typography sx={{ opacity: 0.7 }}>Orders</Typography>
+          <Typography sx={{ fontWeight: 900, fontSize: 28 }}>{totalOrders}</Typography>
+        </Paper>
+
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, minWidth: 220 }}>
+          <Typography sx={{ opacity: 0.7 }}>Revenue</Typography>
+          <Typography sx={{ fontWeight: 900, fontSize: 28 }}>
+            {formatEUR(totalRevenue)}
+          </Typography>
+        </Paper>
+<Paper variant="outlined" sx={{ p: 2, borderRadius: 3, minWidth: 220 }}>
+  <Typography sx={{ opacity: 0.7 }}>Avg order</Typography>
+  <Typography sx={{ fontWeight: 900, fontSize: 28 }}>
+    {formatEUR(avgOrder)}
+  </Typography>
+</Paper>
+
+
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, minWidth: 260 }}>
+          <Typography sx={{ opacity: 0.7, mb: 1 }}>By status</Typography>
+          <Stack direction="row" spacing={1} flexWrap="wrap">
+            <Chip label={`Nou: ${statusCount.Nou}`} />
+            <Chip label={`In lucru: ${statusCount["In lucru"]}`} />
+            <Chip label={`Gata: ${statusCount.Gata}`} />
+          </Stack>
+        </Paper>
+      </Stack>
+
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={6}>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+            <Typography sx={{ fontWeight: 900, mb: 1 }}>Top products</Typography>
+            {topProducts.length === 0 ? (
+              <Typography sx={{ opacity: 0.7 }}>No data in selected range.</Typography>
+            ) : (
+              <Stack spacing={0.75}>
+                {topProducts.map(([name, qty]) => (
+                  <Stack key={name} direction="row" justifyContent="space-between">
+                    <Typography sx={{ pr: 1 }} noWrap>
+                      {name}
+                    </Typography>
+                    <Typography sx={{ fontWeight: 900 }}>{qty}</Typography>
+                  </Stack>
+                ))}
+              </Stack>
+            )}
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+            <Typography sx={{ fontWeight: 900, mb: 1 }}>Top pickup slots</Typography>
+            {topSlots.length === 0 ? (
+              <Typography sx={{ opacity: 0.7 }}>No data in selected range.</Typography>
+            ) : (
+              <Stack spacing={0.75}>
+                {topSlots.map(([slot, qty]) => (
+                  <Stack key={slot} direction="row" justifyContent="space-between">
+                    <Typography sx={{ pr: 1 }} noWrap>
+                      {slot}
+                    </Typography>
+                    <Typography sx={{ fontWeight: 900 }}>{qty}</Typography>
+                  </Stack>
+                ))}
+              </Stack>
+            )}
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+  <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+    <Typography sx={{ fontWeight: 900, mb: 1 }}>
+      Top products by revenue
+    </Typography>
+
+    {topProductsRevenue.length === 0 ? (
+      <Typography sx={{ opacity: 0.7 }}>
+        No data in selected range.
+      </Typography>
+    ) : (
+      <Stack spacing={0.75}>
+        {topProductsRevenue.map(([name, value]) => (
+          <Stack key={name} direction="row" justifyContent="space-between">
+            <Typography sx={{ pr: 1 }} noWrap>
+              {name}
+            </Typography>
+            <Typography sx={{ fontWeight: 900 }}>
+              {formatEUR(value)}
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
+    )}
+  </Paper>
+</Grid>
+      </Grid>
+    </Box>
+  );
+}
+
+function toLocalISODate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function csvEscape(value) {
+  const s = String(value ?? "");
+  if (/[",\n]/.test(s)) return `"${s.replaceAll('"', '""')}"`;
+  return s;
+}
 
 
 
@@ -211,9 +635,10 @@ useEffect(() => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }, [activeCategory]);
   // ===== FIRESTORE STATE =====
+  const [ordersAll, setOrdersAll] = useState([]);
   const [orders, setOrders] = useState([]);
   const [productsDb, setProductsDb] = useState([]);
-const [publicOrders, setPublicOrders] = useState([]);
+const [publicOrders, ] = useState([]);
   // ===== STAFF UI STATE =====
   const [showOnlyOpen, setShowOnlyOpen] = useState(true);
   const [staffTab, setStaffTab] = useState("orders");
@@ -283,6 +708,7 @@ const [publicOrders, setPublicOrders] = useState([]);
   useEffect(() => {
   if (!isStaff || !staffAllowed) {
     setOrders([]);
+    setOrdersAll([]);
     return;
   }
 
@@ -296,7 +722,12 @@ const [publicOrders, setPublicOrders] = useState([]);
       console.log("[ORDERS] snap size =", snap.size);
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       console.log("[ORDERS] first =", list[0]);
-      setOrders(list);
+      setOrdersAll(list); 
+const shown = showOnlyOpen
+  ? list.filter((o) => o.status !== "Gata")
+  : list;
+
+setOrders(shown);
     },
     (err) => {
       console.error("[ORDERS] ERROR =", err);
@@ -307,25 +738,7 @@ const [publicOrders, setPublicOrders] = useState([]);
     console.log("[ORDERS] unsub");
     unsub();
   };
-}, [isStaff, staffAllowed]);
-
-  // ===== LIVE PRODUCTS =====
-  useEffect(() => {
-  if (isStaff) return;
-
-  const q = query(collection(db, "orders_public"), orderBy("createdAt", "desc"));
-
-  const unsub = onSnapshot(
-    q,
-    (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setPublicOrders(list);
-    },
-    (err) => console.error("PUBLIC ORDERS ERROR:", err)
-  );
-
-  return () => unsub();
-}, [isStaff]);
+}, [isStaff, staffAllowed, showOnlyOpen]);
   
   
   
@@ -585,7 +998,6 @@ useEffect(() => {
 
 const codeToShow = publicOrder?.code || orderCode;
 const statusToShow = publicOrder?.status || null;
-
 
  return (
   <>
@@ -1039,9 +1451,10 @@ const statusToShow = publicOrder?.status || null;
         <Box>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2, flexWrap: "wrap" }}>
             <Tabs value={staffTab} onChange={(_, v) => setStaffTab(v)}>
-              <Tab label="Orders" value="orders" />
-              {isAdminRole && <Tab label="Products" value="products" />}
-            </Tabs>
+  <Tab label="Orders" value="orders" />
+  {isAdminRole && <Tab label="Products" value="products" />}
+  {isAdminRole && <Tab label="Reports" value="reports" />} {/* 🔥 ASTA ADAUGI */}
+</Tabs>
 
             {staffTab === "orders" && (
               <FormControlLabel
@@ -1252,6 +1665,10 @@ const statusToShow = publicOrder?.status || null;
               ))}
             </Box>
           )}
+
+          {staffTab === "reports" && isAdminRole && (
+  <ReportsPanel orders={ordersAll} />
+)}
         </Box>
       )}
     </Container>
