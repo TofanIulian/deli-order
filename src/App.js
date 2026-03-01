@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { db,auth } from "./firebase";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
-
+import { QRCodeCanvas } from "qrcode.react";
 import {
   addDoc,
   collection,
@@ -409,10 +409,7 @@ function exportPDF() {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-   useEffect(() => {
-  const saved = localStorage.getItem("lastOrderCode");
-  if (saved) setOrderCode(saved);
-}, []);
+  
 
   return (
   <Box>
@@ -646,7 +643,9 @@ async function staffLogout() {
   const [cart, setCart] = useState([]);
   const [pickupSlot, setPickupSlot] = useState(null);
   const [activeCategory, setActiveCategory] = useState("rolls"); // default deschis: Rolls
-  const [orderCode, setOrderCode] = useState("");
+  const [orderCode, setOrderCode] = useState(() => {
+  return localStorage.getItem("lastOrderCode") || "";
+});
   const [snack, setSnack] = useState({ open: false, msg: "" });
 
   const CATEGORIES = [
@@ -1034,6 +1033,14 @@ useEffect(() => {
 const codeToShow = publicOrder?.code || orderCode;
 const statusToShow = publicOrder?.status || null;
 
+useEffect(() => {
+  if (orderCode) localStorage.setItem("lastOrderCode", orderCode);
+  else localStorage.removeItem("lastOrderCode");
+}, [orderCode]);
+
+const [qrOpen, setQrOpen] = useState(false);
+const orderUrl = window.location.origin + "/"; // link-ul principal de order
+
  return (
   <>
     <AppBar position="sticky" elevation={1}>
@@ -1052,6 +1059,11 @@ const statusToShow = publicOrder?.status || null;
           <Button color="inherit" href="/">
             Back to Client
           </Button>
+)}
+          {isStaff && staffAllowed && (
+      <Button color="inherit" onClick={() => setQrOpen(true)}>
+        QR
+      </Button>
         )}
       </Toolbar>
     </AppBar>
@@ -2009,6 +2021,38 @@ const statusToShow = publicOrder?.status || null;
         </DialogActions>
       </Dialog>
 
-  </>
+<Dialog open={qrOpen} onClose={() => setQrOpen(false)}>
+  <DialogTitle>QR for Ordering Page</DialogTitle>
+
+  <DialogContent sx={{ textAlign: "center" }}>
+    <QRCodeCanvas id="order-qr" value={orderUrl} size={260} includeMargin />
+
+    <Typography sx={{ mt: 1, opacity: 0.75, fontSize: 13 }}>
+      {orderUrl}
+    </Typography>
+  </DialogContent>
+
+  <DialogActions>
+    <Button onClick={() => setQrOpen(false)}>Close</Button>
+
+    <Button
+      variant="contained"
+      onClick={() => {
+        const canvas = document.getElementById("order-qr");
+        const pngUrl = canvas.toDataURL("image/png");
+
+        const a = document.createElement("a");
+        a.href = pngUrl;
+        a.download = "deli-order-qr.png";
+        a.click();
+      }}
+      sx={{ fontWeight: 900 }}
+    >
+      Download PNG
+    </Button>
+  </DialogActions>
+</Dialog>
+
+</>
 );
 }
