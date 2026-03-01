@@ -137,6 +137,18 @@ function formatEUR(n) {
   return `€${Number(n).toFixed(2)}`;
 }
 
+function isWithinWorkingHours() {
+  const now = new Date();
+  const h = now.getHours();
+  const m = now.getMinutes();
+
+  const minutesNow = h * 60 + m;
+
+  const openMinutes = 7 * 60;   // 07:00
+  const closeMinutes = 17 * 60; // 17:00
+
+  return minutesNow >= openMinutes && minutesNow < closeMinutes;
+}
 
 
 export default function App() {
@@ -147,7 +159,15 @@ export default function App() {
 const [lastPublicStatus, setLastPublicStatus] = useState("");
 const [cartOpen, setCartOpen] = useState(false);
 const [publicOrder, setPublicOrder] = useState(null);
+const [isOpen, setIsOpen] = useState(isWithinWorkingHours());
 
+useEffect(() => {
+  const interval = setInterval(() => {
+    setIsOpen(isWithinWorkingHours());
+  }, 60000); // verifică la 1 minut
+
+  return () => clearInterval(interval);
+}, []);
   // ===== AUTH (Email/Password) =====
 const [authUser, setAuthUser] = useState(null);
 const [email, setEmail] = useState("");
@@ -389,7 +409,10 @@ function exportPDF() {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-    
+   useEffect(() => {
+  const saved = localStorage.getItem("lastOrderCode");
+  if (saved) setOrderCode(saved);
+}, []);
 
   return (
   <Box>
@@ -703,7 +726,18 @@ const [publicOrders, ] = useState([]);
     const nowMin = now.getHours() * 60 + now.getMinutes();
     return slotStartMin < nowMin + PREP_BUFFER_MIN;
   }
- 
+ function slotStartMinutes(label) {
+  const start = label.split("-")[0].trim();
+  const [hh, mm] = start.split(":").map(Number);
+  return hh * 60 + mm;
+}
+
+function isSlotWithinWorkingHours(label) {
+  const startMin = slotStartMinutes(label);
+  const openMin = 7 * 60;
+  const closeMin = 17 * 60;
+  return startMin >= openMin && startMin < closeMin;
+}
   // ===== LIVE ORDERS =====
   useEffect(() => {
   if (!isStaff || !staffAllowed) {
@@ -815,6 +849,7 @@ await setDoc(doc(db, "order_public", code), {
   updatedAt: serverTimestamp()
 });
     setOrderCode(code);
+localStorage.setItem("lastOrderCode", code);
     setSnack({ open: true, msg: `Order placed • Code: ${code}` });
 console.log("ORDER CODE =", code);
     setCart([]);
@@ -1059,12 +1094,18 @@ const statusToShow = publicOrder?.status || null;
         <Grid container spacing={2.5} alignItems="flex-start">
           <Grid item xs={12}>
             <Box sx={{ maxWidth: 520, mx: "auto" }}>
+             
               <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>
                 Menu
               </Typography>
               <Typography sx={{ opacity: 0.75, mb: 2 }}>
                 Tap an item to add it. Some items can be customized.
               </Typography>
+              {!isOpen && (
+  <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
+    We are closed now. Orders available daily between <b>07:00</b> – <b>17:00</b>.
+  </Alert>
+)}
 {codeToShow && (
   <Paper
     variant="outlined"
@@ -1098,6 +1139,18 @@ const statusToShow = publicOrder?.status || null;
         sx={{ fontWeight: 900, flexShrink: 0 }}
       />
     )}
+    <Button
+  size="small"
+  variant="text"
+  sx={{ fontWeight: 900, flexShrink: 0 }}
+  onClick={() => {
+    setOrderCode("");
+    setPublicOrder(null);
+    localStorage.removeItem("lastOrderCode");
+  }}
+>
+  Clear
+</Button>
   </Paper>
 )}
               {/* Categories (top buttons) */}
@@ -1191,6 +1244,7 @@ const statusToShow = publicOrder?.status || null;
       textTransform: "none",
       boxShadow: isConfigurable ? 0 : 2
     }}
+    disabled={!isOpen || isOut}
     onClick={() => {
       if (isConfigurable) openConfigurator(product);
       else addToCart(product);
@@ -1333,11 +1387,18 @@ const statusToShow = publicOrder?.status || null;
                   Pickup time
                 </Typography>
 
+<Typography variant="body2" sx={{ opacity: 0.75, mb: 1 }}>
+  Available daily between 07:00 – 17:00.
+</Typography>
+
                 <Stack spacing={1}>
-                  {pickupSlots.map((slot) => {
+                  {pickupSlots
+  .filter((slot) => isSlotWithinWorkingHours(slot.label))
+  .map((slot) => {
                     const used = ordersCountForSlot(slot.label);
                     const isFull = used >= slot.limit;
                     const isPast = isSlotInPast(slot.label);
+                    
                     const disabledSlot = isFull || isPast;
                     const selected = pickupSlot?.label === slot.label;
 
@@ -1370,6 +1431,8 @@ const statusToShow = publicOrder?.status || null;
                               Capacity: {used}/{slot.limit}
                               {isFull ? " • FULL" : ""}
                               {isPast && !isFull ? " • CLOSED" : ""}
+                              
+                              
                             </div>
                           </div>
                         </label>
