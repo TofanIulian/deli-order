@@ -1039,8 +1039,11 @@ useEffect(() => {
 }, [orderCode]);
 
 const [qrOpen, setQrOpen] = useState(false);
-const orderUrl = window.location.origin + "/"; // link-ul principal de order
+const PROD_URL = "https://deli-order.vercel.app";
+const origin =
+  window.location.hostname === "localhost" ? PROD_URL : window.location.origin;
 
+const orderUrl = origin + "/";
  return (
   <>
     <AppBar position="sticky" elevation={1}>
@@ -1048,7 +1051,7 @@ const orderUrl = window.location.origin + "/"; // link-ul principal de order
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           Deli – Quick Order
         </Typography>
-
+       
         {isStaff && staffAllowed && (
           <Button color="inherit" onClick={staffLogout}>
             Logout
