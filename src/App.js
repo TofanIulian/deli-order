@@ -1044,7 +1044,21 @@ const origin =
   window.location.hostname === "localhost" ? PROD_URL : window.location.origin;
 
 const orderUrl = origin + "/";
- return (
+ 
+useEffect(() => {
+  const path = window.location.pathname;
+
+  if (path === "/staff") {
+    window.location.replace("/?mode=staff");
+  }
+
+  if (path === "/admin") {
+    window.location.replace("/?mode=admin");
+  }
+}, []);
+
+
+return (
   <>
     <AppBar position="sticky" elevation={1}>
       <Toolbar>
