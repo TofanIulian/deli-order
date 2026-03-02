@@ -101,33 +101,20 @@ function chipColor(status) {
   return "default";
 }
 
-let _audioCtx;
+let _newOrderAudio = null;
 
 function playNewOrderSound() {
   try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
+    if (!_newOrderAudio) {
+      _newOrderAudio = new Audio("/new-order.mp3");
+      _newOrderAudio.preload = "auto";
+    }
 
-    if (!_audioCtx) _audioCtx = new AudioCtx();
+    _newOrderAudio.pause();      // safe reset
+    _newOrderAudio.currentTime = 0;
+    _newOrderAudio.volume = 1;
 
-    // pe mobile trebuie “unlocked” (după un tap)
-    if (_audioCtx.state === "suspended") _audioCtx.resume();
-
-    const o = _audioCtx.createOscillator();
-    const g = _audioCtx.createGain();
-
-    o.type = "sine";
-    o.frequency.value = 880; // beep
-
-    g.gain.setValueAtTime(0.0001, _audioCtx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.25, _audioCtx.currentTime + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, _audioCtx.currentTime + 0.18);
-
-    o.connect(g);
-    g.connect(_audioCtx.destination);
-
-    o.start();
-    o.stop(_audioCtx.currentTime + 0.2);
+    _newOrderAudio.play().catch(() => {});
   } catch {
     // ignore
   }
@@ -693,8 +680,7 @@ useEffect(() => {
   const [orders, setOrders] = useState([]);
   const [productsDb, setProductsDb] = useState([]);
 const [publicOrders, ] = useState([]);
-
-const lastTopOrderIdRef = useRef(null);
+const initialOrdersLoadedRef = useRef(false);
 const audioUnlockedRef = useRef(false);
   // ===== STAFF UI STATE =====
   const [showOnlyOpen, setShowOnlyOpen] = useState(true);
@@ -772,11 +758,12 @@ function isSlotWithinWorkingHours(label) {
   const closeMin = 23* 60;
   return startMin >= openMin && startMin < closeMin;
 }
-  // ===== LIVE ORDERS =====
-  useEffect(() => {
+  // ===== LIVE ORDERS (UI + REPORTS) + SOUND =====
+useEffect(() => {
   if (!isStaff || !staffAllowed) {
     setOrders([]);
     setOrdersAll([]);
+    initialOrdersLoadedRef.current = false; // reset când ieși din staff
     return;
   }
 
@@ -788,14 +775,26 @@ function isSlotWithinWorkingHours(label) {
     q,
     (snap) => {
       console.log("[ORDERS] snap size =", snap.size);
+
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       console.log("[ORDERS] first =", list[0]);
-      setOrdersAll(list); 
-const shown = showOnlyOpen
-  ? list.filter((o) => o.status !== "Gata")
-  : list;
 
-setOrders(shown);
+      // ✅ Reports folosesc TOATE comenzile
+      setOrdersAll(list);
+
+      // 🔔 Sunet: doar după primul load și doar când apare doc nou
+      if (!initialOrdersLoadedRef.current) {
+        initialOrdersLoadedRef.current = true;
+      } else {
+        const hasNewOrder = snap.docChanges().some((c) => c.type === "added");
+        if (hasNewOrder && audioUnlockedRef.current) {
+          playNewOrderSound();
+        }
+      }
+
+      // ✅ UI poate filtra "Only open"
+      const shown = showOnlyOpen ? list.filter((o) => o.status !== "Gata") : list;
+      setOrders(shown);
     },
     (err) => {
       console.error("[ORDERS] ERROR =", err);
@@ -820,46 +819,7 @@ useEffect(() => {
   return () => unsub();
 }, []);
 
-  // ===== LIVE ORDERS + SOUND (STAFF) =====
-  useEffect(() => {
-  if (!isStaff || !staffAllowed) {
-    setOrders([]);
-    return;
-  }
-
-  const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-
-  const unsub = onSnapshot(q, (snap) => {
-  const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-  // 🔔 Detect new order by newest doc id (NOT by count)
-  const topId = list[0]?.id || null;
-  const prevTopId = lastTopOrderIdRef.current;
-
-  // first load: just set, no sound
-  if (!prevTopId) {
-    lastTopOrderIdRef.current = topId;
-    setOrders(list);
-    return;
-  }
-
-  // new order arrived (newest id changed)
-  if (topId && topId !== prevTopId) {
-    // only beep if we already had a user gesture unlock
-    if (audioUnlockedRef.current) {
-      playNewOrderSound();
-    } else {
-      // optional: show a snack so you know it detected the new order
-      // setSnack({ open: true, msg: "New order (tap once to enable sound)" });
-    }
-  }
-
-  lastTopOrderIdRef.current = topId;
-  setOrders(list);
-});
-
-  return () => unsub();
-}, [isStaff, staffAllowed]);
+  
 
   // ===== CART HELPERS =====
   function addToCart(item) {
@@ -1138,19 +1098,28 @@ useEffect(() => {
   if (!isStaff) return;
 
   const unlock = () => {
-    audioUnlockedRef.current = true;
-
-    // pornește contextul, ca să fie sigur pentru următoarele beep-uri
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
+      if (!_newOrderAudio) {
+        _newOrderAudio = new Audio("/new-order.mp3");
+        _newOrderAudio.preload = "auto";
+      }
 
-      // Atingem puțin playNewOrderSound ca să initializeze contextul
-      playNewOrderSound();
-    } catch {}
+      // mic trick: play foarte încet ca să "unlocked" autoplay
+      _newOrderAudio.volume = 0.01;
+      _newOrderAudio.currentTime = 0;
 
-    window.removeEventListener("pointerdown", unlock);
-    window.removeEventListener("touchstart", unlock);
+      _newOrderAudio.play()
+        .then(() => {
+          _newOrderAudio.pause();
+          _newOrderAudio.currentTime = 0;
+          _newOrderAudio.volume = 1; // revine la volum normal
+        })
+        .catch(() => {
+          // dacă nu merge, tot e ok; următorul tap/interaction poate permite
+        });
+    } catch {
+      // ignore
+    }
   };
 
   window.addEventListener("pointerdown", unlock, { once: true });
@@ -1161,6 +1130,8 @@ useEffect(() => {
     window.removeEventListener("touchstart", unlock);
   };
 }, [isStaff]);
+
+
 
 return (
   <>
