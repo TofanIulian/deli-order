@@ -693,7 +693,9 @@ useEffect(() => {
   const [orders, setOrders] = useState([]);
   const [productsDb, setProductsDb] = useState([]);
 const [publicOrders, ] = useState([]);
-const lastOrderCountRef = useRef(0);
+
+const lastTopOrderIdRef = useRef(null);
+const audioUnlockedRef = useRef(false);
   // ===== STAFF UI STATE =====
   const [showOnlyOpen, setShowOnlyOpen] = useState(true);
   const [staffTab, setStaffTab] = useState("orders");
@@ -828,16 +830,33 @@ useEffect(() => {
   const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
 
   const unsub = onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    if (list.length > lastOrderCountRef.current) {
-      playNewOrderSound();
-    }
+  // 🔔 Detect new order by newest doc id (NOT by count)
+  const topId = list[0]?.id || null;
+  const prevTopId = lastTopOrderIdRef.current;
 
-    lastOrderCountRef.current = list.length;
-
+  // first load: just set, no sound
+  if (!prevTopId) {
+    lastTopOrderIdRef.current = topId;
     setOrders(list);
-  });
+    return;
+  }
+
+  // new order arrived (newest id changed)
+  if (topId && topId !== prevTopId) {
+    // only beep if we already had a user gesture unlock
+    if (audioUnlockedRef.current) {
+      playNewOrderSound();
+    } else {
+      // optional: show a snack so you know it detected the new order
+      // setSnack({ open: true, msg: "New order (tap once to enable sound)" });
+    }
+  }
+
+  lastTopOrderIdRef.current = topId;
+  setOrders(list);
+});
 
   return () => unsub();
 }, [isStaff, staffAllowed]);
@@ -1119,11 +1138,16 @@ useEffect(() => {
   if (!isStaff) return;
 
   const unlock = () => {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
+    audioUnlockedRef.current = true;
 
-    if (!_audioCtx) _audioCtx = new AudioCtx();
-    if (_audioCtx.state === "suspended") _audioCtx.resume();
+    // pornește contextul, ca să fie sigur pentru următoarele beep-uri
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+
+      // Atingem puțin playNewOrderSound ca să initializeze contextul
+      playNewOrderSound();
+    } catch {}
 
     window.removeEventListener("pointerdown", unlock);
     window.removeEventListener("touchstart", unlock);
