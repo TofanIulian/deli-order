@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { db,auth } from "./firebase";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { QRCodeCanvas } from "qrcode.react";
@@ -101,6 +101,38 @@ function chipColor(status) {
   return "default";
 }
 
+let _audioCtx;
+
+function playNewOrderSound() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+
+    if (!_audioCtx) _audioCtx = new AudioCtx();
+
+    // pe mobile trebuie “unlocked” (după un tap)
+    if (_audioCtx.state === "suspended") _audioCtx.resume();
+
+    const o = _audioCtx.createOscillator();
+    const g = _audioCtx.createGain();
+
+    o.type = "sine";
+    o.frequency.value = 880; // beep
+
+    g.gain.setValueAtTime(0.0001, _audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25, _audioCtx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, _audioCtx.currentTime + 0.18);
+
+    o.connect(g);
+    g.connect(_audioCtx.destination);
+
+    o.start();
+    o.stop(_audioCtx.currentTime + 0.2);
+  } catch {
+    // ignore
+  }
+}
+
 function playBeep() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -145,7 +177,7 @@ function isWithinWorkingHours() {
   const minutesNow = h * 60 + m;
 
   const openMinutes = 7 * 60;   // 07:00
-  const closeMinutes = 17 * 60; // 17:00
+  const closeMinutes = 23 * 60; // 17:00
 
   return minutesNow >= openMinutes && minutesNow < closeMinutes;
 }
@@ -661,6 +693,7 @@ useEffect(() => {
   const [orders, setOrders] = useState([]);
   const [productsDb, setProductsDb] = useState([]);
 const [publicOrders, ] = useState([]);
+const lastOrderCountRef = useRef(0);
   // ===== STAFF UI STATE =====
   const [showOnlyOpen, setShowOnlyOpen] = useState(true);
   const [staffTab, setStaffTab] = useState("orders");
@@ -734,7 +767,7 @@ const [publicOrders, ] = useState([]);
 function isSlotWithinWorkingHours(label) {
   const startMin = slotStartMinutes(label);
   const openMin = 7 * 60;
-  const closeMin = 17 * 60;
+  const closeMin = 23* 60;
   return startMin >= openMin && startMin < closeMin;
 }
   // ===== LIVE ORDERS =====
@@ -773,16 +806,41 @@ setOrders(shown);
   };
 }, [isStaff, staffAllowed, showOnlyOpen]);
   
-  
-  
+  // ===== LIVE PRODUCTS =====
+useEffect(() => {
+  const q = query(collection(db, "products"), orderBy("name", "asc"));
+
+  const unsub = onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    setProductsDb(list);
+  });
+
+  return () => unsub();
+}, []);
+
+  // ===== LIVE ORDERS + SOUND (STAFF) =====
   useEffect(() => {
-    const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setProductsDb(list);
-    });
-    return () => unsub();
-  }, []);
+  if (!isStaff || !staffAllowed) {
+    setOrders([]);
+    return;
+  }
+
+  const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+
+  const unsub = onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    if (list.length > lastOrderCountRef.current) {
+      playNewOrderSound();
+    }
+
+    lastOrderCountRef.current = list.length;
+
+    setOrders(list);
+  });
+
+  return () => unsub();
+}, [isStaff, staffAllowed]);
 
   // ===== CART HELPERS =====
   function addToCart(item) {
@@ -1057,6 +1115,28 @@ useEffect(() => {
   }
 }, []);
 
+useEffect(() => {
+  if (!isStaff) return;
+
+  const unlock = () => {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+
+    if (!_audioCtx) _audioCtx = new AudioCtx();
+    if (_audioCtx.state === "suspended") _audioCtx.resume();
+
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("touchstart", unlock);
+  };
+
+  window.addEventListener("pointerdown", unlock, { once: true });
+  window.addEventListener("touchstart", unlock, { once: true });
+
+  return () => {
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("touchstart", unlock);
+  };
+}, [isStaff]);
 
 return (
   <>
