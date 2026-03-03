@@ -164,7 +164,7 @@ function isWithinWorkingHours() {
   const minutesNow = h * 60 + m;
 
   const openMinutes = 7 * 60;   // 07:00
-  const closeMinutes = 23 * 60; // 17:00
+  const closeMinutes = 17 * 60; // 17:00
 
   return minutesNow >= openMinutes && minutesNow < closeMinutes;
 }
@@ -179,8 +179,6 @@ const [lastPublicStatus, setLastPublicStatus] = useState("");
 const [cartOpen, setCartOpen] = useState(false);
 const [publicOrder, setPublicOrder] = useState(null);
 const [isOpen, setIsOpen] = useState(isWithinWorkingHours());
-const audioRef = useRef(null);
-const [audioUnlocked, setAudioUnlocked] = useState(false);
 
 useEffect(() => {
   const interval = setInterval(() => {
@@ -431,41 +429,11 @@ function exportPDF() {
     .replaceAll("'", "&#039;");
 }
   
-useEffect(() => {
-  audioRef.current = new Audio("/new-order.mp3");
-  audioRef.current.preload = "auto";
-}, []);
-
-const unlockAudio = () => {
-  if (!audioRef.current) return;
-
-  audioRef.current.volume = 1;
-
-  audioRef.current.play()
-    .then(() => {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      setAudioUnlocked(true);
-      console.log("🔓 audio unlocked");
-    })
-    .catch((e) => {
-      console.log("❌ unlock failed", e);
-    });
-};
 
 
 
-useEffect(() => {
-  const onFirstTap = () => unlockAudio();
 
-  window.addEventListener("pointerdown", onFirstTap, { once: true });
-  window.addEventListener("touchstart", onFirstTap, { once: true });
 
-  return () => {
-    window.removeEventListener("pointerdown", onFirstTap);
-    window.removeEventListener("touchstart", onFirstTap);
-  };
-}, []);
 
   return (
   <Box>
@@ -1150,6 +1118,7 @@ useEffect(() => {
           _newOrderAudio.pause();
           _newOrderAudio.currentTime = 0;
           _newOrderAudio.volume = 1; // revine la volum normal
+          audioUnlockedRef.current = true;
         })
         .catch(() => {
           // dacă nu merge, tot e ok; următorul tap/interaction poate permite
@@ -1168,18 +1137,8 @@ useEffect(() => {
   };
 }, [isStaff]);
 
-const playNewOrderSound = () => {
-  const a = audioRef.current;
-  if (!a) return;
 
-  a.volume = 1;
-  a.currentTime = 0;
 
-  a.play().catch(() => {
-    // fallback: mai încearcă o dată la scurt timp
-    setTimeout(() => a.play().catch(() => {}), 250);
-  });
-};
 
 return (
   <>
@@ -1189,6 +1148,8 @@ return (
           Deli – Quick Order
         </Typography>
        
+
+
         {isStaff && staffAllowed && (
           <Button color="inherit" onClick={staffLogout}>
             Logout
@@ -1207,34 +1168,7 @@ return (
         )}
       </Toolbar>
     </AppBar>
-       <Box
-  onTouchStart={unlockAudio}
-  onPointerDown={unlockAudio}
-  sx={{ minHeight: "100vh" }}
->
-  <audio ref={audioRef} src="/new-order.mp3" preload="auto" />
-
-  <Button
-    variant="outlined"
-    onClick={() => {
-      if (!audioRef.current) return;
-
-      audioRef.current.currentTime = 0;
-      audioRef.current.volume = 1;
-
-      audioRef.current
-        .play()
-        .then(() => console.log("Play OK ✅"))
-        .catch((e) => console.log("Play blocked ❌", e));
-    }}
-    sx={{ m: 2 }}
-  >
-    TEST BELL
-  </Button>
-
-
-
-    <Container maxWidth="lg" sx={{ py: 3 }}>
+       <Container maxWidth="lg" sx={{ py: 3 }}>
       {/* STAFF LOGIN */}
       {isStaff && !staffAllowed && (
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, mb: 2, maxWidth: 420 }}>
@@ -2220,7 +2154,6 @@ return (
     </Button>
   </DialogActions>
 </Dialog>
-</Box>
 </>
 );
 }
