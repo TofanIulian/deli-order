@@ -180,7 +180,8 @@ const [lastPublicStatus, setLastPublicStatus] = useState("");
 const [cartOpen, setCartOpen] = useState(false);
 const [publicOrder, setPublicOrder] = useState(null);
 const [isOpen, setIsOpen] = useState(isWithinWorkingHours());
-const isTablet = useMediaQuery("(max-width: 900px)");
+const isTablet = useMediaQuery("(max-width: 1024px)");
+const STAFF_FONT_SCALE = isTablet ? 1.35 : 1; // ajustează 1.25 / 1.4 după gust
 useEffect(() => {
   const interval = setInterval(() => {
     setIsOpen(isWithinWorkingHours());
@@ -1679,8 +1680,8 @@ return (
               )}
 
               {staffOrders.map((order) => (
-                <Card key={order.id} sx={{ mb: 2, borderRadius: 3 }}>
-                  <CardContent>
+                <Card key={order.id} sx={{ mb: 2, borderRadius: 3, p: isTablet ? 1 : 0 }}>
+                  <CardContent sx={{ p: isTablet ? 2.5 : 2 }}>
                     <Stack
                       direction="row"
                       spacing={1}
@@ -1688,9 +1689,9 @@ return (
                       justifyContent="space-between"
                       flexWrap="wrap"
                     >
-                      <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                        {order.pickupTime}
-                      </Typography>
+                      <Typography sx={{ fontWeight: 900, fontSize: 16 * STAFF_FONT_SCALE }}>
+  {order.pickupLabel || order.pickupTime}
+</Typography>
 
                       <Chip
                         icon={chipIcon(order.status)}
@@ -1700,21 +1701,24 @@ return (
                         size="small"
                       />
 
-                      <Typography sx={{ fontWeight: 900, fontSize: isTablet ? 18 : 14 }}>
-                        {order.code}
-                      </Typography>
-                    <Typography sx={{ fontSize: isTablet ? 16 : 13, opacity: 0.8 }}>
+                      <Typography sx={{ fontWeight: 900, fontSize: 16 * STAFF_FONT_SCALE }}>
+  {order.code}
+</Typography>
+                    <Typography sx={{ fontSize: 13 * STAFF_FONT_SCALE, opacity: 0.8 }}>
   Pickup: {order.pickupLabel}
 </Typography>
                     </Stack>
 
-                    <Typography sx={{ mt: 1 }}>
-                      <b>Total:</b> {formatEUR(order.total)}
-                    </Typography>
+                    <Typography sx={{ fontSize: 14 * STAFF_FONT_SCALE, fontWeight: 800 }}>
+  Total: {formatEUR(order.total)}
+</Typography>
 
                     <Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
                     {(order.items || []).map((it, idx) => (
-                      <Typography key={idx} variant="body2">
+                      <Typography
+  key={idx}
+  sx={{ fontSize: 13 * STAFF_FONT_SCALE, fontWeight: 700 }}
+>
                         - {it.displayName || it.name} ({formatEUR(it.price)})
                       </Typography>
                     ))}
@@ -1731,13 +1735,19 @@ return (
 >
   <Stack direction="row" spacing={1} sx={{ overflowX: "auto" }}>
     
-                      <Button variant="outlined" onClick={() => setStatus(order.id, order.code, "Nou")}>
+                      <Button variant="outlined" 
+                      sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
+                      onClick={() => setStatus(order.id, order.code, "Nou")}>
                         Nou
                       </Button>
-                      <Button variant="outlined" onClick={() => setStatus(order.id, order.code, "In lucru")}>
+                      <Button variant="outlined" 
+                      sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
+                      onClick={() => setStatus(order.id, order.code, "In lucru")}>
                         In lucru
                       </Button>
-                      <Button variant="contained" onClick={() => setStatus(order.id, order.code, "Gata")}>
+                      <Button variant="contained" 
+                      sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
+                      onClick={() => setStatus(order.id, order.code, "Gata")}>
                         Gata
                       </Button>
                     </Stack>
@@ -1844,7 +1854,7 @@ return (
   {p.active === false ? "Back in stock" : "Out of stock"}
 </Button>
 
-<Paper sx={{ p: isTablet ? 2 : 1.25, borderRadius: 3 }}></Paper>
+<Paper sx={{ p: isTablet ? 2.5 : 1.5, borderRadius: 3 }}></Paper>
                       {isAdminRole && (
                         <Button variant="outlined" onClick={() => openEditConfig(p)}>
                           Edit config
