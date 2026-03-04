@@ -165,7 +165,7 @@ function isWithinWorkingHours() {
   const minutesNow = h * 60 + m;
 
   const openMinutes = 7 * 60;   // 07:00
-  const closeMinutes = 17 * 60; // 17:00
+  const closeMinutes = 23 * 60; // 23:00
 
   return minutesNow >= openMinutes && minutesNow < closeMinutes;
 }
