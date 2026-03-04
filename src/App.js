@@ -43,7 +43,8 @@ import {
   MenuItem,
   Snackbar,
   Alert,
-  Fade
+  Fade,
+  useMediaQuery
 } from "@mui/material";
 
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -179,7 +180,7 @@ const [lastPublicStatus, setLastPublicStatus] = useState("");
 const [cartOpen, setCartOpen] = useState(false);
 const [publicOrder, setPublicOrder] = useState(null);
 const [isOpen, setIsOpen] = useState(isWithinWorkingHours());
-
+const isTablet = useMediaQuery("(max-width: 900px)");
 useEffect(() => {
   const interval = setInterval(() => {
     setIsOpen(isWithinWorkingHours());
@@ -677,6 +678,13 @@ async function staffLogout() {
   { key: "sides", label: "SIDES" },
   { key: "drinks", label: "DRINKS" }
 ];
+
+// auto-close cart when empty
+useEffect(() => {
+  if (cart.length === 0) {
+    setCartOpen(false);
+  }
+}, [cart]);
 useEffect(() => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }, [activeCategory]);
@@ -1576,6 +1584,17 @@ return (
                   Pay & Place order
                 </Button>
 
+{cart.length === 0 && (
+  <Button
+    fullWidth
+    variant="outlined"
+    sx={{ mt: 1, borderRadius: 2, py: 1.1, fontWeight: 900 }}
+    onClick={() => setCartOpen(false)}
+  >
+    Close
+  </Button>
+)}
+
                 {!canPlaceOrder && (
                   <Typography sx={{ mt: 1, opacity: 0.75 }}>
                     Add items and choose a pickup time.
@@ -1681,9 +1700,12 @@ return (
                         size="small"
                       />
 
-                      <Typography sx={{ fontWeight: 800, letterSpacing: 1 }}>
+                      <Typography sx={{ fontWeight: 900, fontSize: isTablet ? 18 : 14 }}>
                         {order.code}
                       </Typography>
+                    <Typography sx={{ fontSize: isTablet ? 16 : 13, opacity: 0.8 }}>
+  Pickup: {order.pickupLabel}
+</Typography>
                     </Stack>
 
                     <Typography sx={{ mt: 1 }}>
@@ -1822,6 +1844,7 @@ return (
   {p.active === false ? "Back in stock" : "Out of stock"}
 </Button>
 
+<Paper sx={{ p: isTablet ? 2 : 1.25, borderRadius: 3 }}></Paper>
                       {isAdminRole && (
                         <Button variant="outlined" onClick={() => openEditConfig(p)}>
                           Edit config
