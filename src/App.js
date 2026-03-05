@@ -195,6 +195,8 @@ const [cartOpen, setCartOpen] = useState(false);
 const [publicOrder, setPublicOrder] = useState(null);
 const [isOpen, setIsOpen] = useState(isWithinWorkingHours());
 const isTablet = useMediaQuery("(max-width: 1024px)");
+const [highlightedOrderId, setHighlightedOrderId] = useState(null);
+
 const STAFF_FONT_SCALE = isTablet ? 1.35 : 1; // ajustează 1.25 / 1.4 după gust
 useEffect(() => {
   const interval = setInterval(() => {
@@ -837,12 +839,18 @@ useEffect(() => {
       if (!initialOrdersLoadedRef.current) {
         initialOrdersLoadedRef.current = true;
       } else {
-        const hasNewOrder = snap.docChanges().some((c) => c.type === "added");
-        if (hasNewOrder && audioUnlockedRef.current) {
-          playNewOrderSound();
-        }
-      }
+        const added = snap.docChanges().find((c) => c.type === "added");
 
+if (added) {
+  const newId = added.doc.id;
+playNewOrderSound();
+  setHighlightedOrderId(newId);
+
+  setTimeout(() => {
+    setHighlightedOrderId(null);
+  }, 10000); // 10 sec highlight
+}
+}
       // ✅ UI poate filtra "Only open"
       const shown = showOnlyOpen ? list.filter((o) => normalizeStatus(o.status) !== STATUS.READY) : list;
       setOrders(shown);
@@ -1725,7 +1733,17 @@ return (
               )}
 
               {staffOrders.map((order) => (
-                <Card key={order.id} sx={{ mb: 2, borderRadius: 3, p: isTablet ? 1 : 0 }}>
+                <Card
+  key={order.id}
+  sx={{
+    mb: 2,
+    borderRadius: 3,
+    p: isTablet ? 1 : 0,
+    backgroundColor:
+      order.id === highlightedOrderId ? "#e8f5e9" : "background.paper",
+    transition: "background-color 0.5s ease"
+  }}
+>
                   <CardContent sx={{ p: isTablet ? 2.5 : 2 }}>
                     <Stack
   direction="row"
