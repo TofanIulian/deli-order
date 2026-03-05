@@ -96,12 +96,25 @@ function makePickupSlots(now, bufferMin, slotSizeMin, windowHours, limitPerSlot)
 
 // ===== UI HELPERS =====
 function chipColor(status) {
-  if (status === "Gata") return "success";
-  if (status === "In lucru") return "warning";
-  if (status === "Nou") return "info";
+  const st = normalizeStatus(status);
+  if (st === STATUS.READY) return "success";
+  if (st === STATUS.IN_PROGRESS) return "warning";
+  if (st === STATUS.NEW) return "info";
   return "default";
 }
+const STATUS = {
+  NEW: "New",
+  IN_PROGRESS: "In progress",
+  READY: "Ready",
+};
 
+// suport pentru comenzile vechi din DB
+function normalizeStatus(s) {
+  if (s === "Nou") return STATUS.NEW;
+  if (s === "In lucru") return STATUS.IN_PROGRESS;
+  if (s === "Gata") return STATUS.READY;
+  return s || STATUS.NEW;
+}
 let _newOrderAudio = null;
 
 function playNewOrderSound() {
@@ -147,9 +160,10 @@ function playBeep() {
 }
 
 function chipIcon(status) {
-  if (status === "Gata") return <CheckCircleIcon fontSize="small" />;
-  if (status === "In lucru") return <HourglassTopIcon fontSize="small" />;
-  if (status === "Nou") return <FiberNewIcon fontSize="small" />;
+  const st = normalizeStatus(status);
+  if (st === STATUS.READY) return <CheckCircleIcon fontSize="small" />;
+  if (st === STATUS.IN_PROGRESS) return <HourglassTopIcon fontSize="small" />;
+  if (st === STATUS.NEW) return <FiberNewIcon fontSize="small" />;
   return null;
 }
 
@@ -208,6 +222,13 @@ function addDaysISO(isoDate, deltaDays) {
   return toLocalISODate(dt);
 }
 
+function formatPickupDateShort(iso) {
+  // iso = "YYYY-MM-DD"
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${String(y).slice(2)}`;
+}
+
 function ReportsPanel({ orders }) {
   const todayStr = toLocalISODate(new Date());
 
@@ -228,9 +249,9 @@ function ReportsPanel({ orders }) {
 const avgOrder = totalOrders === 0 ? 0 : totalRevenue / totalOrders;
 
   const statusCount = useMemo(() => {
-    const map = { Nou: 0, "In lucru": 0, Gata: 0, Other: 0 };
+    const map = { [STATUS.NEW]: 0, [STATUS.IN_PROGRESS]: 0, [STATUS.READY]: 0, Other: 0 };
     filtered.forEach((o) => {
-      const st = o.status || "Other";
+      const st = normalizeStatus(o.status);
       if (map[st] === undefined) map.Other += 1;
       else map[st] += 1;
     });
@@ -539,9 +560,9 @@ function exportPDF() {
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, minWidth: 260 }}>
           <Typography sx={{ opacity: 0.7, mb: 1 }}>By status</Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap">
-            <Chip label={`Nou: ${statusCount.Nou}`} />
-            <Chip label={`In lucru: ${statusCount["In lucru"]}`} />
-            <Chip label={`Gata: ${statusCount.Gata}`} />
+            <Chip label={`New: ${statusCount[STATUS.NEW]}`} />
+<Chip label={`In progress: ${statusCount[STATUS.IN_PROGRESS]}`} />
+<Chip label={`Ready: ${statusCount[STATUS.READY]}`} />
           </Stack>
         </Paper>
       </Stack>
@@ -693,12 +714,26 @@ useEffect(() => {
   const [ordersAll, setOrdersAll] = useState([]);
   const [orders, setOrders] = useState([]);
   const [productsDb, setProductsDb] = useState([]);
-const [publicOrders, ] = useState([]);
+const [publicOrders, setPublicOrders] = useState([]);
 const initialOrdersLoadedRef = useRef(false);
 const audioUnlockedRef = useRef(false);
   // ===== STAFF UI STATE =====
   const [showOnlyOpen, setShowOnlyOpen] = useState(true);
   const [staffTab, setStaffTab] = useState("orders");
+  
+  useEffect(() => {
+
+  const q = query(collection(db, "orders_public"));
+
+  const unsub = onSnapshot(q, (snap) => {
+    const list = snap.docs.map(d => d.data());
+    setPublicOrders(list);
+  });
+
+  return () => unsub();
+
+}, []);
+  
   useEffect(() => {
   if (!isAdminRole && staffTab === "products") {
     setStaffTab("orders");
@@ -781,6 +816,8 @@ useEffect(() => {
     return;
   }
 
+
+
   console.log("[ORDERS] subscribing");
 
   const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
@@ -807,7 +844,7 @@ useEffect(() => {
       }
 
       // ✅ UI poate filtra "Only open"
-      const shown = showOnlyOpen ? list.filter((o) => o.status !== "Gata") : list;
+      const shown = showOnlyOpen ? list.filter((o) => normalizeStatus(o.status) !== STATUS.READY) : list;
       setOrders(shown);
     },
     (err) => {
@@ -871,7 +908,7 @@ useEffect(() => {
       pickupDate,
       items: cart,
       total: Number(total.toFixed(2)),
-      status: "Nou",
+      status: STATUS.NEW,
       createdAt: serverTimestamp()
     };
 const existing = orders.filter(o => o.pickupTime === pickupSlot.label);
@@ -893,7 +930,7 @@ await setDoc(doc(db, "orders_public", orderRef.id), {
 // 🔹 client tracking (ce aveai deja)
 await setDoc(doc(db, "order_public", code), {
   code,
-  status: "Nou",
+  status: STATUS.NEW,
   pickupTime: pickupSlot.label,
   pickupDate,
   updatedAt: serverTimestamp()
@@ -1034,9 +1071,9 @@ async function saveEditConfig() {
   );
 
   const staffOrders = useMemo(
-    () => (showOnlyOpen ? sortedOrders.filter((o) => o.status !== "Gata") : sortedOrders),
-    [showOnlyOpen, sortedOrders]
-  );
+  () => (showOnlyOpen ? sortedOrders.filter((o) => normalizeStatus(o.status) !== STATUS.READY) : sortedOrders),
+  [showOnlyOpen, sortedOrders]
+);
 
   // ===== CONFIG CALCS (ONE PLACE) =====
   const saladsEnabled = !!configProduct?.config?.salads?.enabled;
@@ -1068,9 +1105,9 @@ useEffect(() => {
     if (next?.status && next.status !== lastPublicStatus) {
       setSnack({ open: true, msg: `Status: ${next.status}` });
 
-      if (next.status === "Gata") {
-        playBeep();
-      }
+      if (normalizeStatus(next.status) === STATUS.READY) {
+  playBeep();
+}
 
       setLastPublicStatus(next.status);
     }
@@ -1602,39 +1639,47 @@ return (
                   </Typography>
                 )}
 
-                {publicOrder && (
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      mt: 1.5,
-                      p: 1.25,
-                      borderRadius: 2,
-                      borderWidth: publicOrder.status === "Gata" ? 2 : 1,
-                      opacity: 0.95,
-                      background:
-                        publicOrder.status === "Gata"
-                          ? "#e8f5e9"
-                          : publicOrder.status === "In lucru"
-                          ? "#fff8e1"
-                          : "#e3f2fd"
-                    }}
-                  >
-                    <Stack direction="row" alignItems="center" justifyContent="space-between">
-                      <Typography sx={{ fontWeight: 900 }}>Status: {publicOrder.status}</Typography>
+                {publicOrder && (() => {
+  const st = normalizeStatus(publicOrder.status);
 
-                      <Chip
-                        label={publicOrder.status}
-                        color={chipColor(publicOrder.status)}
-                        icon={chipIcon(publicOrder.status)}
-                        size="small"
-                      />
-                    </Stack>
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        mt: 1.5,
+        p: 1.25,
+        borderRadius: 2,
+        borderWidth: st === STATUS.READY ? 2 : 1,
+        opacity: 0.95,
+        background:
+          st === STATUS.READY
+            ? "#e8f5e9"
+            : st === STATUS.IN_PROGRESS
+            ? "#fff8e1"
+            : "#e3f2fd"
+      }}
+    >
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Typography sx={{ fontWeight: 900 }}>
+          Status: {st}
+        </Typography>
 
-                    {publicOrder.status === "Gata" && (
-                      <Typography sx={{ mt: 0.5, fontWeight: 800 }}>✅ Ready for pickup!</Typography>
-                    )}
-                  </Paper>
-                )}
+        <Chip
+          label={st}
+          color={chipColor(st)}
+          icon={chipIcon(st)}
+          size="small"
+        />
+      </Stack>
+
+      {st === STATUS.READY && (
+        <Typography sx={{ mt: 0.5, fontWeight: 800 }}>
+          ✅ Ready for pickup!
+        </Typography>
+      )}
+    </Paper>
+  );
+})()}
               </Box>
             </Box>
           </Drawer>
@@ -1683,42 +1728,74 @@ return (
                 <Card key={order.id} sx={{ mb: 2, borderRadius: 3, p: isTablet ? 1 : 0 }}>
                   <CardContent sx={{ p: isTablet ? 2.5 : 2 }}>
                     <Stack
-                      direction="row"
-                      spacing={1}
-                      alignItems="center"
-                      justifyContent="space-between"
-                      flexWrap="wrap"
-                    >
-                      <Typography sx={{ fontWeight: 900, fontSize: 16 * STAFF_FONT_SCALE }}>
-  {order.pickupLabel || order.pickupTime}
-</Typography>
+  direction="row"
+  spacing={2}
+  alignItems="flex-start"
+  justifyContent="space-between"
+  flexWrap="wrap"
+>
+  {/* LEFT: date + slot */}
+  <Box sx={{ minWidth: 220 }}>
+    <Typography sx={{ fontWeight: 900, fontSize: 18 * STAFF_FONT_SCALE, lineHeight: 1.1 }}>
+      {formatPickupDateShort(order.pickupDate)}
+    </Typography>
 
-                      <Chip
-                        icon={chipIcon(order.status)}
-                        label={order.status}
-                        color={chipColor(order.status)}
-                        variant="filled"
-                        size="small"
-                      />
+    <Typography sx={{ fontWeight: 900, fontSize: 20 * STAFF_FONT_SCALE, lineHeight: 1.1 }}>
+      {order.pickupTime}
+    </Typography>
+  </Box>
 
-                      <Typography sx={{ fontWeight: 900, fontSize: 16 * STAFF_FONT_SCALE }}>
-  {order.code}
-</Typography>
-                    <Typography sx={{ fontSize: 13 * STAFF_FONT_SCALE, opacity: 0.8 }}>
-  Pickup: {order.pickupLabel}
-</Typography>
-                    </Stack>
+  {/* CENTER: status chip */}
+  <Chip
+    icon={chipIcon(order.status)}
+    label={order.status}
+    color={chipColor(order.status)}
+    variant="filled"
+    sx={{
+      fontWeight: 900,
+      fontSize: 14 * STAFF_FONT_SCALE,
+      px: 1.2,
+      py: 2.2,
+      borderRadius: 999
+    }}
+  />
 
-                    <Typography sx={{ fontSize: 14 * STAFF_FONT_SCALE, fontWeight: 800 }}>
-  Total: {formatEUR(order.total)}
-</Typography>
+  {/* RIGHT: order code BIG */}
+  <Box sx={{ textAlign: "right" }}>
+    <Typography
+      sx={{
+        fontWeight: 1000,
+        letterSpacing: 3,
+        fontSize: 26 * STAFF_FONT_SCALE,
+        lineHeight: 1
+      }}
+    >
+      {order.code}
+    </Typography>
+    <Typography sx={{ opacity: 0.7, fontSize: 12 * STAFF_FONT_SCALE }}>
+      Order Code
+    </Typography>
+  </Box>
+</Stack>
+
+                    <Chip
+  label={`Total: ${formatEUR(order.total)}`}
+  sx={{
+    mt: 1.2,
+    fontWeight: 1000,
+    fontSize: 14 * STAFF_FONT_SCALE,
+    px: 1.2,
+    py: 2,
+    borderRadius: 999
+  }}
+/>
 
                     <Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
                     {(order.items || []).map((it, idx) => (
                       <Typography
   key={idx}
-  sx={{ fontSize: 13 * STAFF_FONT_SCALE, fontWeight: 700 }}
->
+  sx={{ fontSize: 14 * STAFF_FONT_SCALE, fontWeight: 800, lineHeight: 1.35 }}
+  >
                         - {it.displayName || it.name} ({formatEUR(it.price)})
                       </Typography>
                     ))}
@@ -1735,21 +1812,29 @@ return (
 >
   <Stack direction="row" spacing={1} sx={{ overflowX: "auto" }}>
     
-                      <Button variant="outlined" 
-                      sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-                      onClick={() => setStatus(order.id, order.code, "Nou")}>
-                        Nou
-                      </Button>
-                      <Button variant="outlined" 
-                      sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-                      onClick={() => setStatus(order.id, order.code, "In lucru")}>
-                        In lucru
-                      </Button>
-                      <Button variant="contained" 
-                      sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-                      onClick={() => setStatus(order.id, order.code, "Gata")}>
-                        Gata
-                      </Button>
+                      <Button
+  variant="outlined"
+  sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
+  onClick={() => setStatus(order.id, order.code, STATUS.NEW)}
+>
+  New
+</Button>
+
+<Button
+  variant="outlined"
+  sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
+  onClick={() => setStatus(order.id, order.code, STATUS.IN_PROGRESS)}
+>
+  In progress
+</Button>
+
+<Button
+  variant="contained"
+  sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
+  onClick={() => setStatus(order.id, order.code, STATUS.READY)}
+>
+  Ready
+</Button>
                     </Stack>
                     </Box>
                   </CardContent>
