@@ -60,7 +60,8 @@ const PREP_BUFFER_MIN = 10;
 const SLOT_MINUTES = 15;
 const WINDOW_HOURS = 2;
 const SLOT_LIMIT = 5;
-
+const ORDER_HISTORY_KEY = "orderHistory";
+const ORDER_HISTORY_MAX = 5; // poți pune 2..5
 // AUTH
 const ADMIN_EMAILS = ["admin@deli.local"];
 
@@ -196,6 +197,9 @@ const [publicOrder, setPublicOrder] = useState(null);
 const [isOpen, setIsOpen] = useState(isWithinWorkingHours());
 const isTablet = useMediaQuery("(max-width: 1024px)");
 const [highlightedOrderId, setHighlightedOrderId] = useState(null);
+const [historyOpen, setHistoryOpen] = useState(false);
+const [historySelected, setHistorySelected] = useState(null);
+
 
 const STAFF_FONT_SCALE = isTablet ? 1.35 : 1; // ajustează 1.25 / 1.4 după gust
 useEffect(() => {
@@ -696,13 +700,22 @@ async function staffLogout() {
   return localStorage.getItem("lastOrderCode") || "";
 });
   const [snack, setSnack] = useState({ open: false, msg: "" });
-
+const [orderHistory, setOrderHistory] = useState(() => {
+  try {
+    return JSON.parse(localStorage.getItem(ORDER_HISTORY_KEY) || "[]");
+  } catch {
+    return [];
+  }
+});
   const CATEGORIES = [
   { key: "rolls", label: "ROLLS" },
   { key: "sides", label: "SIDES" },
   { key: "drinks", label: "DRINKS" }
 ];
-
+function saveOrderHistory(next) {
+  setOrderHistory(next);
+  localStorage.setItem(ORDER_HISTORY_KEY, JSON.stringify(next));
+}
 // auto-close cart when empty
 useEffect(() => {
   if (cart.length === 0) {
@@ -919,6 +932,18 @@ useEffect(() => {
       status: STATUS.NEW,
       createdAt: serverTimestamp()
     };
+
+    const entry = {
+  code,
+  pickupDate,
+  pickupTime: pickupSlot.label,
+  total: Number(total.toFixed(2)),
+  items: cart.map((it) => ({
+    name: it.displayName || it.name,
+    price: Number(it.price || 0)
+  })),
+  createdAt: Date.now()
+};
 const existing = orders.filter(o => o.pickupTime === pickupSlot.label);
 
 if (existing.length >= SLOT_LIMIT) {
@@ -943,6 +968,9 @@ await setDoc(doc(db, "order_public", code), {
   pickupDate,
   updatedAt: serverTimestamp()
 });
+saveOrderHistory(
+  [entry, ...orderHistory.filter((x) => x.code !== code)].slice(0, ORDER_HISTORY_MAX)
+);
     setOrderCode(code);
 localStorage.setItem("lastOrderCode", code);
     setSnack({ open: true, msg: `Order placed • Code: ${code}` });
@@ -1128,7 +1156,7 @@ useEffect(() => {
 
 const codeToShow = publicOrder?.code || orderCode;
 const statusToShow = publicOrder?.status || null;
-
+const statusLabel = statusToShow ? normalizeStatus(statusToShow) : null;
 useEffect(() => {
   if (orderCode) localStorage.setItem("lastOrderCode", orderCode);
   else localStorage.removeItem("lastOrderCode");
@@ -1298,9 +1326,9 @@ return (
 
     {statusToShow && (
       <Chip
-        label={statusToShow}
-        color={chipColor(statusToShow)}
-        icon={chipIcon(statusToShow)}
+        label={statusLabel}
+color={chipColor(statusLabel)}
+icon={chipIcon(statusLabel)}
         size="small"
         sx={{ fontWeight: 900, flexShrink: 0 }}
       />
@@ -1317,6 +1345,92 @@ return (
 >
   Clear
 </Button>
+  </Paper>
+)}
+
+{orderHistory.length > 0 && (
+  <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3, mb: 2 }}>
+    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+      <Typography sx={{ fontWeight: 900 }}>Last orders</Typography>
+
+      <Button
+        size="small"
+        variant="text"
+        sx={{ fontWeight: 900 }}
+        onClick={() => saveOrderHistory([])}
+      >
+        Clear history
+      </Button>
+    </Stack>
+
+    <Stack spacing={1}>
+      {orderHistory.slice(0, ORDER_HISTORY_MAX).map((o) => (
+        <Paper key={o.code} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 2 }}>
+                {o.code}
+              </Typography>
+
+              <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                {o.pickupDate} • {o.pickupTime} • {formatEUR(o.total)}
+              </Typography>
+
+              <Typography variant="body2" sx={{ opacity: 0.75 }} noWrap>
+                {(o.items || []).map((it) => it.name).join(", ")}
+              </Typography>
+            </Box>
+
+            <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+  <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+  <Button
+    size="small"
+    variant="outlined"
+    sx={{ fontWeight: 900 }}
+    onClick={() => {
+      setOrderCode(o.code);
+      localStorage.setItem("lastOrderCode", o.code);
+      setSnack({ open: true, msg: `Tracking ${o.code}` });
+    }}
+  >
+    Track
+  </Button>
+<Button
+  size="small"
+  variant="contained"
+  sx={{ fontWeight: 900 }}
+  onClick={() => {
+    const itemsToAdd = (o.items || []).map((it) => ({
+      // minimul necesar ca să apară bine în cart
+      name: it.name,
+      displayName: it.name,
+      price: it.price
+    }));
+
+    setCart((prev) => [...prev, ...itemsToAdd]);
+    setSnack({ open: true, msg: "Added to cart" });
+    setCartOpen(true);
+  }}
+>
+  Reorder
+</Button>
+  <Button
+    size="small"
+    variant="text"
+    sx={{ fontWeight: 900 }}
+    onClick={() => {
+      setHistorySelected(o);
+      setHistoryOpen(true);
+    }}
+  >
+    Details
+  </Button>
+</Stack>
+</Stack>
+          </Stack>
+        </Paper>
+      ))}
+    </Stack>
   </Paper>
 )}
               {/* Categories (top buttons) */}
@@ -1849,7 +1963,10 @@ return (
 <Button
   variant="contained"
   sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-  onClick={() => setStatus(order.id, order.code, STATUS.READY)}
+  onClick={() => {
+    if (!window.confirm("Mark this order as READY for pickup?")) return;
+    setStatus(order.id, order.code, STATUS.READY);
+  }}
 >
   Ready
 </Button>
@@ -2050,6 +2167,155 @@ return (
         </Button>
       </DialogActions>
     </Dialog>
+
+<Dialog
+  open={historyOpen}
+  onClose={() => setHistoryOpen(false)}
+  fullWidth
+  maxWidth="sm"
+>
+  <DialogTitle sx={{ fontWeight: 900 }}>
+    Order details
+  </DialogTitle>
+
+  <DialogContent dividers>
+    {!historySelected ? (
+      <Typography sx={{ opacity: 0.75 }}>No order selected.</Typography>
+    ) : (
+      <Stack spacing={1.25}>
+        <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+          <Typography sx={{ fontWeight: 1000, letterSpacing: 2, fontSize: 20 }}>
+            {historySelected.code}
+          </Typography>
+          <Typography sx={{ opacity: 0.75 }}>
+            {historySelected.pickupDate} • {historySelected.pickupTime}
+          </Typography>
+        </Paper>
+
+        <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+          <Typography sx={{ fontWeight: 900, mb: 1 }}>Items</Typography>
+
+          {(historySelected.items || []).length === 0 ? (
+            <Typography sx={{ opacity: 0.75 }}>No items stored.</Typography>
+          ) : (
+            <Stack spacing={0.6}>
+              {(historySelected.items || []).map((it, idx) => (
+                <Stack key={idx} direction="row" justifyContent="space-between">
+                  <Typography sx={{ fontWeight: 800 }}>{it.name}</Typography>
+                  <Typography sx={{ fontWeight: 900 }}>{formatEUR(it.price)}</Typography>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+
+          <Divider sx={{ my: 1.25 }} />
+
+          <Stack direction="row" justifyContent="space-between">
+            <Typography sx={{ fontWeight: 900 }}>Total</Typography>
+            <Typography sx={{ fontWeight: 1000 }}>{formatEUR(historySelected.total)}</Typography>
+          </Stack>
+        </Paper>
+      </Stack>
+    )}
+  </DialogContent>
+
+  <DialogActions sx={{ p: 2 }}>
+    <Button
+      variant="outlined"
+      onClick={() => setHistoryOpen(false)}
+    >
+      Close
+    </Button>
+
+    {historySelected?.code && (
+      <Button
+        variant="contained"
+        sx={{ fontWeight: 900 }}
+        onClick={() => {
+          setOrderCode(historySelected.code);
+          localStorage.setItem("lastOrderCode", historySelected.code);
+          setHistoryOpen(false);
+          setSnack({ open: true, msg: `Tracking ${historySelected.code}` });
+        }}
+      >
+        Track
+      </Button>
+    )}
+  </DialogActions>
+</Dialog>
+
+<Dialog
+  open={historyOpen}
+  onClose={() => setHistoryOpen(false)}
+  fullWidth
+  maxWidth="sm"
+>
+  <DialogTitle sx={{ fontWeight: 900 }}>Order details</DialogTitle>
+
+  <DialogContent dividers>
+    {!historySelected ? (
+      <Typography sx={{ opacity: 0.75 }}>No order selected.</Typography>
+    ) : (
+      <Stack spacing={1.25}>
+        <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+          <Typography sx={{ fontWeight: 1000, letterSpacing: 2, fontSize: 20 }}>
+            {historySelected.code}
+          </Typography>
+          <Typography sx={{ opacity: 0.75 }}>
+            {historySelected.pickupDate} • {historySelected.pickupTime}
+          </Typography>
+        </Paper>
+
+        <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+          <Typography sx={{ fontWeight: 900, mb: 1 }}>Items</Typography>
+
+          {(historySelected.items || []).length === 0 ? (
+            <Typography sx={{ opacity: 0.75 }}>No items stored.</Typography>
+          ) : (
+            <Stack spacing={0.6}>
+              {(historySelected.items || []).map((it, idx) => (
+                <Stack key={idx} direction="row" justifyContent="space-between">
+                  <Typography sx={{ fontWeight: 800 }}>{it.name}</Typography>
+                  <Typography sx={{ fontWeight: 900 }}>{formatEUR(it.price)}</Typography>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+
+          <Divider sx={{ my: 1.25 }} />
+
+          <Stack direction="row" justifyContent="space-between">
+            <Typography sx={{ fontWeight: 900 }}>Total</Typography>
+            <Typography sx={{ fontWeight: 1000 }}>
+              {formatEUR(historySelected.total)}
+            </Typography>
+          </Stack>
+        </Paper>
+      </Stack>
+    )}
+  </DialogContent>
+
+  <DialogActions sx={{ p: 2 }}>
+    <Button variant="outlined" onClick={() => setHistoryOpen(false)}>
+      Close
+    </Button>
+
+    {historySelected?.code && (
+      <Button
+        variant="contained"
+        sx={{ fontWeight: 900 }}
+        onClick={() => {
+          setOrderCode(historySelected.code);
+          localStorage.setItem("lastOrderCode", historySelected.code);
+          setHistoryOpen(false);
+          setSnack({ open: true, msg: `Tracking ${historySelected.code}` });
+        }}
+      >
+        Track
+      </Button>
+    )}
+  </DialogActions>
+</Dialog>
 
     {/* SNACKBAR */}
     <Snackbar
