@@ -78,13 +78,18 @@ function minutesUntilPickup(order) {
 
   if (!slot || !date) return null;
 
-  const start = slot.split("-")[0].trim(); // ex: "12:15"
+  const normalizedSlot = slot.replace("–", "-");
+  const start = normalizedSlot.split("-")[0].trim();
+
   const [hh, mm] = start.split(":").map(Number);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
 
   const [y, m, d] = date.split("-").map(Number);
-  const pickupDateTime = new Date(y, m - 1, d, hh, mm, 0, 0);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
 
+  const pickupDateTime = new Date(y, m - 1, d, hh, mm, 0, 0);
   const now = new Date();
+
   return Math.floor((pickupDateTime.getTime() - now.getTime()) / 60000);
 }
 
@@ -481,40 +486,6 @@ function exportPDF() {
     .replaceAll("'", "&#039;");
 }
   
-useEffect(() => {
-  if (!isStaff || !staffAllowed || orders.length === 0) return;
-
-  const interval = setInterval(() => {
-    const warningIds = [];
-
-    orders.forEach((order) => {
-      const st = normalizeStatus(order.status);
-      const minsLeft = minutesUntilPickup(order);
-
-      const shouldWarn =
-        st !== STATUS.READY &&
-        minsLeft !== null &&
-        minsLeft <= 3 &&
-        minsLeft >= 0;
-
-      if (shouldWarn) {
-        warningIds.push(order.id);
-
-        if (!warnedLateOrdersRef.current.has(order.id)) {
-          playNewOrderSound();
-          warnedLateOrdersRef.current.add(order.id);
-        }
-      }
-    });
-
-    setLateWarningIds(warningIds);
-  }, 30000);
-
-  return () => clearInterval(interval);
-}, [orders]);
-
-
-
 
 
   return (
@@ -1174,6 +1145,47 @@ async function saveEditConfig() {
   [showOnlyOpen, sortedOrders]
 );
 
+useEffect(() => {
+  if (!isStaff || !staffAllowed || orders.length === 0) {
+    setLateWarningIds([]);
+    return;
+  }
+
+  const checkWarnings = () => {
+    const warningIds = [];
+
+    orders.forEach((order) => {
+      const st = normalizeStatus(order.status);
+      const minsLeft = minutesUntilPickup(order);
+
+      const shouldWarn =
+        st !== STATUS.READY &&
+        minsLeft !== null &&
+        minsLeft <= 30 &&
+        minsLeft >= 0;
+
+      if (shouldWarn) {
+        warningIds.push(order.id);
+
+        if (!warnedLateOrdersRef.current.has(order.id)) {
+          playNewOrderSound();
+          warnedLateOrdersRef.current.add(order.id);
+        }
+      } else {
+        warnedLateOrdersRef.current.delete(order.id);
+      }
+    });
+
+    setLateWarningIds(warningIds);
+  };
+
+  checkWarnings(); // rulează imediat, nu doar după 30 sec
+
+  const interval = setInterval(checkWarnings, 3000);
+
+  return () => clearInterval(interval);
+}, [orders, isStaff, staffAllowed]);
+
   // ===== CONFIG CALCS (ONE PLACE) =====
   const saladsEnabled = !!configProduct?.config?.salads?.enabled;
   const saladsIncluded = Number(configProduct?.config?.salads?.included || 0);
@@ -1198,26 +1210,28 @@ async function saveEditConfig() {
 useEffect(() => {
   if (!orderCode) return;
 
-  const unsub = onSnapshot(doc(db, "order_public", orderCode), (snap) => {
-    const next = snap.exists() ? snap.data() : null;
+ const unsub = onSnapshot(doc(db, "order_public", orderCode), (snap) => {
+  const next = snap.exists() ? snap.data() : null;
 
-    if (next?.status && next.status !== lastPublicStatus) {
-      setSnack({ open: true, msg: `Status: ${next.status}` });
+  if (next?.status && next.status !== lastPublicStatus) {
+    setSnack({ open: true, msg: `Status: ${normalizeStatus(next.status)}` });
 
-      if (normalizeStatus(next.status) === STATUS.READY) {
-  playBeep();
-}
-setTimeout(() => {
-    setOrderCode("");
-    setPublicOrder(null);
-    setLastPublicStatus("");
-    localStorage.removeItem("lastOrderCode");
-  }, 4000);
-      setLastPublicStatus(next.status);
+    if (normalizeStatus(next.status) === STATUS.READY) {
+      playBeep();
+
+      setTimeout(() => {
+        setOrderCode("");
+        setPublicOrder(null);
+        setLastPublicStatus("");
+        localStorage.removeItem("lastOrderCode");
+      }, 4000);
     }
 
-    setPublicOrder(next);
-  });
+    setLastPublicStatus(next.status);
+  }
+
+  setPublicOrder(next);
+});
 
   return () => unsub();
 }, [orderCode, lastPublicStatus]);
