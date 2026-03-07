@@ -907,19 +907,23 @@ useEffect(() => {
 
       // 🔔 Sunet: doar după primul load și doar când apare doc nou
       if (!initialOrdersLoadedRef.current) {
-        initialOrdersLoadedRef.current = true;
-      } else {
-        const added = snap.docChanges().find((c) => c.type === "added");
+  initialOrdersLoadedRef.current = true;
+} else {
+  const addedChanges = snap
+    .docChanges()
+    .filter((c) => c.type === "added");
 
-if (added) {
-  const newId = added.doc.id;
-playNewOrderSound();
-  setHighlightedOrderId(newId);
+  if (addedChanges.length > 0) {
+    const newId = addedChanges[0].doc.id;
 
-  setTimeout(() => {
-    setHighlightedOrderId(null);
-  }, 10000); // 10 sec highlight
-}
+    playNewOrderSound();
+
+    setHighlightedOrderId(newId);
+
+    setTimeout(() => {
+      setHighlightedOrderId(null);
+    }, 10000); // 10 sec highlight
+  }
 }
       // ✅ UI poate filtra "Only open"
       const shown = showOnlyOpen ? list.filter((o) => normalizeStatus(o.status) !== STATUS.READY) : list;
