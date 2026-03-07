@@ -894,51 +894,49 @@ useEffect(() => {
 
   const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
 
-  const unsub = onSnapshot(
-    q,
-    (snap) => {
-      console.log("[ORDERS] snap size =", snap.size);
+ const unsub = onSnapshot(
+  q,
+  (snap) => {
+    console.log("[ORDERS] snap size =", snap.size);
 
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      console.log("[ORDERS] first =", list[0]);
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    console.log("[ORDERS] first =", list[0]);
 
-      // ✅ Reports folosesc TOATE comenzile
-      setOrdersAll(list);
+    // ✅ Reports folosesc TOATE comenzile
+    setOrdersAll(list);
 
-      // 🔔 Sunet: doar după primul load și doar când apare doc nou
-      if (!initialOrdersLoadedRef.current) {
-  initialOrdersLoadedRef.current = true;
-} else {
-  const addedChanges = snap
-    .docChanges()
-    .filter((c) => c.type === "added");
+    // 🔔 Sunet + highlight doar după primul load și doar la comenzi noi reale
+    if (!initialOrdersLoadedRef.current) {
+      initialOrdersLoadedRef.current = true;
+    } else {
+      const addedChanges = snap.docChanges().filter((c) => c.type === "added");
 
-  if (addedChanges.length > 0) {
-    const newId = addedChanges[0].doc.id;
+      if (addedChanges.length > 0) {
+        const newId = addedChanges[0].doc.id;
 
-    playNewOrderSound();
+        playNewOrderSound();
 
-    setHighlightedOrderId(newId);
+        setHighlightedOrderId(newId);
 
-    setTimeout(() => {
-      setHighlightedOrderId(null);
-    }, 10000); // 10 sec highlight
-  }
-}
-      // ✅ UI poate filtra "Only open"
-      const shown = showOnlyOpen ? list.filter((o) => normalizeStatus(o.status) !== STATUS.READY) : list;
-      setOrders(shown);
-    },
-    (err) => {
-      console.error("[ORDERS] ERROR =", err);
+        setTimeout(() => {
+          setHighlightedOrderId(null);
+        }, 10000); // 10 sec highlight
+      }
     }
-  );
 
-  return () => {
-    console.log("[ORDERS] unsub");
-    unsub();
-  };
-}, [isStaff, staffAllowed, showOnlyOpen]);
+    // ✅ orders rămâne lista completă; filtrarea se face separat în staffOrders
+    setOrders(list);
+  },
+  (err) => {
+    console.error("[ORDERS] ERROR =", err);
+  }
+);
+
+return () => {
+  console.log("[ORDERS] unsub");
+  unsub();
+};
+}, [isStaff, staffAllowed]);
   
   // ===== LIVE PRODUCTS =====
 useEffect(() => {
