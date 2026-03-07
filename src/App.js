@@ -72,6 +72,22 @@ function pad2(n) {
   return String(n).padStart(2, "0");
 }
 
+function minutesUntilPickup(order) {
+  const slot = order.pickupTime || order.pickupLabel;
+  const date = order.pickupDate;
+
+  if (!slot || !date) return null;
+
+  const start = slot.split("-")[0].trim(); // ex: "12:15"
+  const [hh, mm] = start.split(":").map(Number);
+
+  const [y, m, d] = date.split("-").map(Number);
+  const pickupDateTime = new Date(y, m - 1, d, hh, mm, 0, 0);
+
+  const now = new Date();
+  return Math.floor((pickupDateTime.getTime() - now.getTime()) / 60000);
+}
+
 function minutesToHHMM(min) {
   const h = Math.floor(min / 60);
   const m = min % 60;
@@ -94,7 +110,11 @@ function makePickupSlots(now, bufferMin, slotSizeMin, windowHours, limitPerSlot)
   }
   return slots;
 }
-
+function formatShortDate(iso) {
+  if (!iso) return "";
+  const [ ,m, d] = iso.split("-");
+  return `${d}/${m}`;
+}
 // ===== UI HELPERS =====
 function chipColor(status) {
   const st = normalizeStatus(status);
@@ -199,6 +219,9 @@ const isTablet = useMediaQuery("(max-width: 1024px)");
 const [highlightedOrderId, setHighlightedOrderId] = useState(null);
 const [historyOpen, setHistoryOpen] = useState(false);
 const [historySelected, setHistorySelected] = useState(null);
+const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+const [lateWarningIds, setLateWarningIds] = useState([]);
+const warnedLateOrdersRef = useRef(new Set());
 
 
 const STAFF_FONT_SCALE = isTablet ? 1.35 : 1; // ajustează 1.25 / 1.4 după gust
@@ -458,7 +481,37 @@ function exportPDF() {
     .replaceAll("'", "&#039;");
 }
   
+useEffect(() => {
+  if (!isStaff || !staffAllowed || orders.length === 0) return;
 
+  const interval = setInterval(() => {
+    const warningIds = [];
+
+    orders.forEach((order) => {
+      const st = normalizeStatus(order.status);
+      const minsLeft = minutesUntilPickup(order);
+
+      const shouldWarn =
+        st !== STATUS.READY &&
+        minsLeft !== null &&
+        minsLeft <= 3 &&
+        minsLeft >= 0;
+
+      if (shouldWarn) {
+        warningIds.push(order.id);
+
+        if (!warnedLateOrdersRef.current.has(order.id)) {
+          playNewOrderSound();
+          warnedLateOrdersRef.current.add(order.id);
+        }
+      }
+    });
+
+    setLateWarningIds(warningIds);
+  }, 30000);
+
+  return () => clearInterval(interval);
+}, [orders]);
 
 
 
@@ -795,7 +848,11 @@ const audioUnlockedRef = useRef(false);
   );
 
   function ordersCountForSlot(slotLabel) {
-  return publicOrders.filter((o) => o.pickupTime === slotLabel).length;
+  const today = toLocalISODate(new Date());
+
+  return publicOrders.filter(
+    (o) => o.pickupDate === today && o.pickupTime === slotLabel
+  ).length;
 }
   function toMinutes(hhmm) {
     const [h, m] = hhmm.split(":").map(Number);
@@ -920,7 +977,7 @@ useEffect(() => {
   async function placeOrder() {
     const code = generateOrderCode();
     const now = new Date();
-    const pickupDate = now.toISOString().slice(0, 10);
+    const pickupDate = toLocalISODate(now);
 
     const newOrder = {
       code,
@@ -944,7 +1001,11 @@ useEffect(() => {
   })),
   createdAt: Date.now()
 };
-const existing = orders.filter(o => o.pickupTime === pickupSlot.label);
+
+
+const existing = orders.filter(
+  (o) => o.pickupDate === pickupDate && o.pickupTime === pickupSlot.label
+);
 
 if (existing.length >= SLOT_LIMIT) {
   alert("Slot full, choose another time");
@@ -1144,7 +1205,12 @@ useEffect(() => {
       if (normalizeStatus(next.status) === STATUS.READY) {
   playBeep();
 }
-
+setTimeout(() => {
+    setOrderCode("");
+    setPublicOrder(null);
+    setLastPublicStatus("");
+    localStorage.removeItem("lastOrderCode");
+  }, 4000);
       setLastPublicStatus(next.status);
     }
 
@@ -1349,90 +1415,162 @@ icon={chipIcon(statusLabel)}
 )}
 
 {orderHistory.length > 0 && (
-  <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3, mb: 2 }}>
-    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-      <Typography sx={{ fontWeight: 900 }}>Last orders</Typography>
-
-      <Button
-        size="small"
-        variant="text"
-        sx={{ fontWeight: 900 }}
-        onClick={() => saveOrderHistory([])}
-      >
-        Clear history
-      </Button>
-    </Stack>
-
-    <Stack spacing={1}>
-      {orderHistory.slice(0, ORDER_HISTORY_MAX).map((o) => (
-        <Paper key={o.code} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontWeight: 900, letterSpacing: 2 }}>
-                {o.code}
-              </Typography>
-
-              <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                {o.pickupDate} • {o.pickupTime} • {formatEUR(o.total)}
-              </Typography>
-
-              <Typography variant="body2" sx={{ opacity: 0.75 }} noWrap>
-                {(o.items || []).map((it) => it.name).join(", ")}
-              </Typography>
-            </Box>
-
-            <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
-  <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
-  <Button
-    size="small"
+  <Paper
     variant="outlined"
-    sx={{ fontWeight: 900 }}
-    onClick={() => {
-      setOrderCode(o.code);
-      localStorage.setItem("lastOrderCode", o.code);
-      setSnack({ open: true, msg: `Tracking ${o.code}` });
+    sx={{
+      p: 1.25,
+      borderRadius: 3,
+      mb: 2,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 1.5
     }}
   >
-    Track
-  </Button>
-<Button
+    <Box>
+      <Typography sx={{ fontWeight: 900 }}>
+        Recent orders
+      </Typography>
+      <Typography variant="body2" sx={{ opacity: 0.75 }}>
+        {orderHistory.length} saved order{orderHistory.length === 1 ? "" : "s"}
+      </Typography>
+    </Box>
+
+    <Button
+      size="small"
+      variant="outlined"
+      sx={{ fontWeight: 900, borderRadius: 999 }}
+      onClick={() => setHistoryDrawerOpen(true)}
+    >
+      View
+    </Button>
+  </Paper>
+)}
+<Drawer
+  anchor="bottom"
+  open={historyDrawerOpen}
+  onClose={() => setHistoryDrawerOpen(false)}
+  PaperProps={{
+    sx: {
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      pb: 0,
+      maxHeight: "85vh"
+    }
+  }}
+>
+  <Box sx={{ display: "flex", flexDirection: "column", height: "85vh" }}>
+    <Box sx={{ p: 2 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+  <Typography variant="h6" sx={{ fontWeight: 900 }}>
+    Recent orders
+  </Typography>
+
+  <Stack direction="row" spacing={1} alignItems="center">
+    <Button
+      size="small"
+      variant="text"
+      sx={{ fontWeight: 900 }}
+      onClick={() => saveOrderHistory([])}
+    >
+      Clear
+    </Button>
+
+    <IconButton onClick={() => setHistoryDrawerOpen(false)}>
+      <CloseIcon />
+    </IconButton>
+  </Stack>
+</Stack>
+
+      <Divider sx={{ mt: 2 }} />
+    </Box>
+
+    <Box sx={{ px: 2, pb: 2, overflow: "auto" }}>
+      <Box
+  sx={{
+    width: 40,
+    height: 4,
+    background: "#ccc",
+    borderRadius: 2,
+    mx: "auto",
+    mb: 1
+  }}
+/>
+      <Stack spacing={1}>
+        {orderHistory.slice(0, ORDER_HISTORY_MAX).map((o) => (
+          <Paper key={o.code} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+            <Stack spacing={1}>
+              <Box>
+                <Typography sx={{ fontWeight: 900, letterSpacing: 2 }}>
+                  {o.code}
+                </Typography>
+
+                <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                  {formatShortDate(o.pickupDate)} • {o.pickupTime} • {formatEUR(o.total)}
+                </Typography>
+
+                <Typography variant="body2" sx={{ opacity: 0.75 }} noWrap>
+                  {(o.items || []).map((it) => it.name).join(", ")}
+                </Typography>
+              </Box>
+
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontWeight: 900 }}
+                  onClick={() => {
+                    setOrderCode(o.code);
+                    localStorage.setItem("lastOrderCode", o.code);
+                    setSnack({ open: true, msg: `Tracking ${o.code}` });
+                    setHistoryDrawerOpen(false);
+                  }}
+                >
+                  Track
+                </Button>
+
+                <Button
   size="small"
   variant="contained"
   sx={{ fontWeight: 900 }}
   onClick={() => {
     const itemsToAdd = (o.items || []).map((it) => ({
-      // minimul necesar ca să apară bine în cart
       name: it.name,
       displayName: it.name,
       price: it.price
     }));
 
     setCart((prev) => [...prev, ...itemsToAdd]);
+
+    // UX flow
+    setHistoryDrawerOpen(false); // închide history
+    setCartOpen(true);           // deschide cart
+
     setSnack({ open: true, msg: "Added to cart" });
-    setCartOpen(true);
   }}
 >
   Reorder
 </Button>
-  <Button
-    size="small"
-    variant="text"
-    sx={{ fontWeight: 900 }}
-    onClick={() => {
-      setHistorySelected(o);
-      setHistoryOpen(true);
-    }}
-  >
-    Details
-  </Button>
-</Stack>
-</Stack>
-          </Stack>
-        </Paper>
-      ))}
-    </Stack>
-  </Paper>
-)}
+
+                <Button
+                  size="small"
+                  variant="text"
+                  sx={{ fontWeight: 900 }}
+                  onClick={() => {
+                    setHistorySelected(o);
+                    setHistoryOpen(true);
+                  }}
+                >
+                  Details
+                </Button>
+              </Stack>
+            </Stack>
+          </Paper>
+        ))}
+      </Stack>
+    </Box>
+  </Box>
+</Drawer>
               {/* Categories (top buttons) */}
               <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
                 {CATEGORIES.map((c) => (
@@ -1689,8 +1827,9 @@ icon={chipIcon(statusLabel)}
                         sx={{
                           p: 1.25,
                           borderRadius: 2,
-                          opacity: disabledSlot ? 0.5 : 1,
-                          borderWidth: selected ? 2 : 1
+                          opacity: disabledSlot ? 0.6 : 1,
+borderWidth: selected ? 2 : 1,
+backgroundColor: isFull ? "#fff5f5" : "transparent",
                         }}
                       >
                         <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -1707,13 +1846,24 @@ icon={chipIcon(statusLabel)}
                           />
                           <div>
                             <div style={{ fontWeight: 900 }}>{slot.label}</div>
-                            <div style={{ opacity: 0.75, fontSize: 13 }}>
-                              Capacity: {used}/{slot.limit}
-                              {isFull ? " • FULL" : ""}
-                              {isPast && !isFull ? " • CLOSED" : ""}
-                              
-                              
-                            </div>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
+  <span style={{ opacity: 0.75, fontSize: 13 }}>
+    {used}/{slot.limit} booked
+  </span>
+
+  <span
+    style={{
+      fontSize: 12,
+      fontWeight: 900,
+      padding: "2px 8px",
+      borderRadius: 999,
+      background: isFull ? "#ffebee" : isPast ? "#eeeeee" : "#e8f5e9",
+      color: isFull ? "#c62828" : isPast ? "#616161" : "#2e7d32"
+    }}
+  >
+    {isFull ? "FULL" : isPast ? "CLOSED" : "AVAILABLE"}
+  </span>
+</div>
                           </div>
                         </label>
                       </Paper>
@@ -1847,15 +1997,32 @@ icon={chipIcon(statusLabel)}
               )}
 
               {staffOrders.map((order) => (
-                <Card
+              <Card
   key={order.id}
   sx={{
     mb: 2,
     borderRadius: 3,
     p: isTablet ? 1 : 0,
     backgroundColor:
-      order.id === highlightedOrderId ? "#e8f5e9" : "background.paper",
-    transition: "background-color 0.5s ease"
+      lateWarningIds.includes(order.id)
+        ? "#ffebee"
+        : order.id === highlightedOrderId
+        ? "#e8f5e9"
+        : "background.paper",
+    border:
+      lateWarningIds.includes(order.id)
+        ? "2px solid #d32f2f"
+        : "1px solid rgba(0,0,0,0.12)",
+    transition: "background-color 0.5s ease, border 0.3s ease",
+    animation: lateWarningIds.includes(order.id)
+      ? "latePulse 1.5s infinite"
+      : "none",
+
+    "@keyframes latePulse": {
+      "0%": { boxShadow: "0 0 0 0 rgba(211,47,47,0.6)" },
+      "70%": { boxShadow: "0 0 0 10px rgba(211,47,47,0)" },
+      "100%": { boxShadow: "0 0 0 0 rgba(211,47,47,0)" }
+    }
   }}
 >
                   <CardContent sx={{ p: isTablet ? 2.5 : 2 }}>
