@@ -1161,7 +1161,7 @@ useEffect(() => {
       const shouldWarn =
         st !== STATUS.READY &&
         minsLeft !== null &&
-        minsLeft <= 30 &&
+        minsLeft <= 3 &&
         minsLeft >= 0;
 
       if (shouldWarn) {
@@ -1181,7 +1181,7 @@ useEffect(() => {
 
   checkWarnings(); // rulează imediat, nu doar după 30 sec
 
-  const interval = setInterval(checkWarnings, 3000);
+  const interval = setInterval(checkWarnings, 10000);
 
   return () => clearInterval(interval);
 }, [orders, isStaff, staffAllowed]);
