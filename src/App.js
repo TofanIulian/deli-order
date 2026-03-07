@@ -72,26 +72,7 @@ function pad2(n) {
   return String(n).padStart(2, "0");
 }
 
-function minutesUntilPickup(order) {
-  const slot = order.pickupTime || order.pickupLabel;
-  const date = order.pickupDate;
 
-  if (!slot || !date) return null;
-
-  const normalizedSlot = slot.replace("–", "-");
-  const start = normalizedSlot.split("-")[0].trim();
-
-  const [hh, mm] = start.split(":").map(Number);
-  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
-
-  const [y, m, d] = date.split("-").map(Number);
-  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
-
-  const pickupDateTime = new Date(y, m - 1, d, hh, mm, 0, 0);
-  const now = new Date();
-
-  return Math.floor((pickupDateTime.getTime() - now.getTime()) / 60000);
-}
 
 function minutesToHHMM(min) {
   const h = Math.floor(min / 60);
@@ -101,6 +82,37 @@ function minutesToHHMM(min) {
 
 function roundUpToSlot(minutes, slotSize) {
   return Math.ceil(minutes / slotSize) * slotSize;
+}
+
+function hasReachedWarningTime(order) {
+  const slot = order.pickupTime || order.pickupLabel;
+  const date = order.pickupDate;
+
+  if (!slot || !date) return false;
+
+  const normalizedSlot = slot.replace("–", "-");
+  const startText = normalizedSlot.split("-")[0]?.trim();
+
+  if (!startText) return false;
+
+  const [startH, startM] = startText.split(":").map(Number);
+  const [y, m, d] = date.split("-").map(Number);
+
+  if (
+    !Number.isFinite(startH) ||
+    !Number.isFinite(startM) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(m) ||
+    !Number.isFinite(d)
+  ) {
+    return false;
+  }
+
+  const start = new Date(y, m - 1, d, startH, startM, 0, 0);
+  const warnFrom = new Date(start.getTime() - 3 * 60 * 1000);
+  const now = new Date();
+
+  return now >= warnFrom;
 }
 
 function makePickupSlots(now, bufferMin, slotSizeMin, windowHours, limitPerSlot) {
@@ -1156,13 +1168,11 @@ useEffect(() => {
 
     orders.forEach((order) => {
       const st = normalizeStatus(order.status);
-      const minsLeft = minutesUntilPickup(order);
+      
 
       const shouldWarn =
-        st !== STATUS.READY &&
-        minsLeft !== null &&
-        minsLeft <= 3 &&
-        minsLeft >= 0;
+  st !== STATUS.READY &&
+  hasReachedWarningTime(order);
 
       if (shouldWarn) {
         warningIds.push(order.id);
