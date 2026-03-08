@@ -1349,62 +1349,50 @@ function formatLine(left, right, width = 32) {
 return (
   <>
   <style>
-{`
-@media print {
+  {`
+    @media print {
+      body * {
+        visibility: hidden;
+      }
 
-  body * {
-    visibility: hidden;
-  }
+      .print-ticket,
+      .print-ticket * {
+        visibility: visible;
+      }
 
-  .print-ticket, .print-ticket * {
-    visibility: visible;
-  }
+      .print-ticket {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 280px;
+        margin: 0;
+      }
 
-  .print-ticket {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 280px;
-  }
+      .app-screen {
+        display: none !important;
+      }
 
-}
-
-  .app-screen {
-    display: none !important;
-  }
-
-  .print-ticket {
-    display: block !important;
-    width: 72mm;
-    margin: 0 auto;
-  }
-
-  body {
-    margin: 0;
-    padding: 0;
-    background: white !important;
-  }
-
-}
-`}
+      body {
+        margin: 0;
+        padding: 0;
+        background: white !important;
+      }
+    }
+  `}
 </style>
 
   {printMode && printOrderData && (
-    <Box
-      className="print-ticket"
-      sx={{ p: 2, bgcolor: "#fff", color: "#000" }}
-    >
-      <Box
-  className="print-ticket"
-  sx={{
-    width: "280px",
-    margin: "0 auto",
-    padding: "12px",
-    background: "#fff",
-    color: "#000",
-    fontFamily: "monospace"
-  }}
->
+  <Box
+    className="print-ticket"
+    sx={{
+      width: "280px",
+      margin: "0 auto",
+      padding: "12px",
+      background: "#fff",
+      color: "#000",
+      fontFamily: "monospace"
+    }}
+  >
         <Typography align="center" sx={{ fontWeight: 900, fontSize: 20 }}>
           WRIGHTS FOOD FAYRE
         </Typography>
@@ -1446,13 +1434,13 @@ return (
         <Box sx={{ textAlign: "center", mt: 2 }}>
           <Typography>Thank you!</Typography>
         </Box>
-      </Box>
+      
     </Box>
   )}
 
   <Box className="app-screen" sx={{ display: printMode ? "none" : "block" }}>
    
-    <><AppBar position="sticky" elevation={1}>
+    <AppBar position="sticky" elevation={1}>
           <Toolbar>
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
               Deli – Quick Order
@@ -2887,7 +2875,7 @@ return (
     </Button>
   </DialogActions>
 </Dialog>
- </>
+ 
 
 </Box>
 </>
