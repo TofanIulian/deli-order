@@ -1348,69 +1348,78 @@ function formatLine(left, right, width = 32) {
 
 return (
   <>
-   {printMode && printOrderData ? (
-  <Box sx={{ p: 2, bgcolor: "#fff", color: "#000", minHeight: "100vh" }}>
-    <Box sx={{ maxWidth: 320, mx: "auto", fontFamily: "monospace" }}>
-      <Box sx={{ display: "flex", justifyContent: "center", mb: 1 }}>
-  <img
-    src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://deli-order.vercel.app"
-    alt="QR Order"
-    style={{ width: 90, height: 90 }}
-  />
-</Box>
-      <Typography align="center" sx={{ fontWeight: 900, fontSize: 20 }}>
-  WRIGHTS FOOD FAYRE
-</Typography>
+  <style>
+    {`
+      @media print {
+        .app-screen {
+          display: none !important;
+        }
 
-      <Typography align="center" sx={{ mb: 1, fontSize: 14 }}>
-  Order Receipt
-</Typography>
+        .print-ticket {
+          display: block !important;
+        }
 
-      <Divider sx={{ my: 1, borderColor: "#000" }} />
+        body {
+          margin: 0;
+          padding: 0;
+          background: white !important;
+        }
+      }
+    `}
+  </style>
 
-      <Typography align="center" sx={{ fontSize: 36, fontWeight: 900 }}>
-  {printOrderData.code}
-</Typography>
+  {printMode && printOrderData && (
+    <Box
+      className="print-ticket"
+      sx={{ p: 2, bgcolor: "#fff", color: "#000", minHeight: "100vh" }}
+    >
+      <Box sx={{ maxWidth: 320, mx: "auto", fontFamily: "monospace" }}>
+        <Typography align="center" sx={{ fontWeight: 900, fontSize: 20 }}>
+          WRIGHTS FOOD FAYRE
+        </Typography>
 
-      <Typography align="center">
-  Pickup: {new Date(printOrderData.pickupDate).toLocaleDateString("en-IE")} {printOrderData.pickupTime}
-</Typography>
+        <Typography
+          align="center"
+          sx={{ fontSize: 32, fontWeight: 900, letterSpacing: 2 }}
+        >
+          {printOrderData.code}
+        </Typography>
 
-      <Typography align="center">
-  ------------------------------
-</Typography>
+        <Typography align="center">
+          Pickup: {printOrderData.pickupDate} {printOrderData.pickupTime}
+        </Typography>
 
-      <Typography sx={{ fontWeight: 900, mb: 1 }}>Items</Typography>
+        <Typography align="center">
+          ------------------------------
+        </Typography>
 
-      {(printOrderData.items || []).map((it, idx) => {
-  const name = it.displayName || it.name;
-  const price = `€${Number(it.price || 0).toFixed(2)}`;
+        {(printOrderData.items || []).map((it, idx) => {
+          const name = it.displayName || it.name;
+          const price = `€${Number(it.price || 0).toFixed(2)}`;
 
-  return (
-    <Typography key={idx}>
-      {formatLine(name, price)}
-    </Typography>
-  );
-})}
+          return (
+            <Typography key={idx}>
+              {formatLine(name, price)}
+            </Typography>
+          );
+        })}
 
-      <Divider sx={{ my: 1, borderColor: "#000" }} />
+        <Typography align="center">
+          ------------------------------
+        </Typography>
 
-      <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
-  <Typography sx={{ fontWeight: 900 }}>
-  {formatLine("TOTAL", `€${Number(printOrderData.total || 0).toFixed(2)}`)}
-</Typography>
-  <Typography sx={{ fontWeight: 900, fontSize: 18 }}>
-    €{Number(printOrderData.total || 0).toFixed(2)}
-  </Typography>
-</Box>
-<Box sx={{ textAlign: "center", mt: 2 }}>
-  <Typography sx={{ fontSize: 14 }}>
-    Thank you!
-  </Typography>
-</Box>
+        <Typography sx={{ fontWeight: 900 }}>
+          {formatLine("TOTAL", `€${Number(printOrderData.total || 0).toFixed(2)}`)}
+        </Typography>
+
+        <Box sx={{ textAlign: "center", mt: 2 }}>
+          <Typography>Thank you!</Typography>
+        </Box>
+      </Box>
     </Box>
-  </Box>
-) : (
+  )}
+
+  <Box className="app-screen" sx={{ display: printMode ? "none" : "block" }}>
    
     <><AppBar position="sticky" elevation={1}>
           <Toolbar>
@@ -2848,7 +2857,8 @@ return (
   </DialogActions>
 </Dialog>
  </>
-)}
+
+</Box>
 </>
 );
 }
