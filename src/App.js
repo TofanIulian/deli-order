@@ -1352,10 +1352,22 @@ return (
 {`
 @media print {
 
-  @page {
-    size: 80mm auto;
-    margin: 0;
+  body * {
+    visibility: hidden;
   }
+
+  .print-ticket, .print-ticket * {
+    visibility: visible;
+  }
+
+  .print-ticket {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 280px;
+  }
+
+}
 
   .app-screen {
     display: none !important;
@@ -1382,7 +1394,17 @@ return (
       className="print-ticket"
       sx={{ p: 2, bgcolor: "#fff", color: "#000" }}
     >
-      <Box sx={{ maxWidth: 320, mx: "auto", fontFamily: "monospace" }}>
+      <Box
+  className="print-ticket"
+  sx={{
+    width: "280px",
+    margin: "0 auto",
+    padding: "12px",
+    background: "#fff",
+    color: "#000",
+    fontFamily: "monospace"
+  }}
+>
         <Typography align="center" sx={{ fontWeight: 900, fontSize: 20 }}>
           WRIGHTS FOOD FAYRE
         </Typography>
