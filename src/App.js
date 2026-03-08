@@ -144,109 +144,18 @@ Total: €${Number(order.total).toFixed(2)}
 }
 
 function printOrderBrowser(order) {
-  const itemsHtml = (order.items || [])
-    .map(
-      (it) => `
-        <div style="display:flex; justify-content:space-between; gap:12px; margin-bottom:4px;">
-          <span>${it.displayName || it.name}</span>
-          <span>€${Number(it.price || 0).toFixed(2)}</span>
-        </div>
-      `
-    )
-    .join("");
-
   const html = `
     <!doctype html>
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>Order ${order.code}</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            padding: 16px;
-            margin: 0;
-            color: #111;
-          }
-
-          .ticket {
-            max-width: 320px;
-            margin: 0 auto;
-          }
-
-          .center {
-            text-align: center;
-          }
-
-          .title {
-            font-size: 20px;
-            font-weight: 900;
-            margin-bottom: 4px;
-          }
-
-          .divider {
-            border-top: 1px dashed #000;
-            margin: 12px 0;
-          }
-
-          .code {
-            font-size: 24px;
-            font-weight: 900;
-            letter-spacing: 2px;
-            margin: 8px 0;
-          }
-
-          .muted {
-            opacity: 0.8;
-            font-size: 14px;
-          }
-
-          .total {
-            display: flex;
-            justify-content: space-between;
-            font-weight: 900;
-            font-size: 18px;
-            margin-top: 8px;
-          }
-
-          @media print {
-            body {
-              padding: 0;
-            }
-
-            .ticket {
-              max-width: none;
-            }
-          }
-        </style>
+        <title>Print Test</title>
       </head>
-      <body>
-        <div class="ticket">
-          <div class="center">
-            <div class="title">Wrights Food Fayre</div>
-            <div class="muted">Kitchen Ticket</div>
-            <div class="code">${order.code}</div>
-            <div class="muted">${order.pickupDate} • ${order.pickupTime}</div>
-          </div>
-
-          <div class="divider"></div>
-
-          <div style="font-weight:900; margin-bottom:8px;">Items</div>
-          ${itemsHtml}
-
-          <div class="divider"></div>
-
-          <div class="total">
-            <span>Total</span>
-            <span>€${Number(order.total || 0).toFixed(2)}</span>
-          </div>
-        </div>
-
-        <script>
-          window.onload = () => {
-            setTimeout(() => window.print(), 300);
-          };
-        </script>
+      <body style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2>Wrights Food Fayre</h2>
+        <p>Order: ${order.code}</p>
+        <p>Pickup: ${order.pickupDate} ${order.pickupTime}</p>
+        <p>Total: €${Number(order.total || 0).toFixed(2)}</p>
       </body>
     </html>
   `;
@@ -257,6 +166,11 @@ function printOrderBrowser(order) {
   w.document.open();
   w.document.write(html);
   w.document.close();
+
+  setTimeout(() => {
+    w.focus();
+    w.print();
+  }, 1000);
 }
 
 function makePickupSlots(now, bufferMin, slotSizeMin, windowHours, limitPerSlot) {
