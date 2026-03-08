@@ -115,7 +115,7 @@ function hasReachedWarningTime(order) {
   return now >= warnFrom;
 }
 
-async function printOrder(order) {
+function printOrder(order) {
 
   const itemsText = (order.items || [])
     .map(i => `- ${i.name}  €${Number(i.price).toFixed(2)}`)
@@ -123,32 +123,24 @@ async function printOrder(order) {
 
   const text =
 `Wrights Food Fayre
-----------------------------
+--------------------------
 Order: ${order.code}
 Pickup: ${order.pickupDate} ${order.pickupTime}
 
 ${itemsText}
 
-----------------------------
+--------------------------
 Total: €${Number(order.total).toFixed(2)}
 
 \n\n`;
 
-  try {
+  const encoded = encodeURIComponent(text);
 
-    await fetch("http://localhost:40213/print", {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/plain"
-      },
-      body: text
-    });
+  const url =
+`intent://print?text=${encoded}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end`;
 
-    console.log("PRINT SENT");
+  window.location.href = url;
 
-  } catch (err) {
-    console.error("PRINT ERROR", err);
-  }
 }
 
 function makePickupSlots(now, bufferMin, slotSizeMin, windowHours, limitPerSlot) {
