@@ -1349,29 +1349,38 @@ function formatLine(left, right, width = 32) {
 return (
   <>
   <style>
-    {`
-      @media print {
-        .app-screen {
-          display: none !important;
-        }
+{`
+@media print {
 
-        .print-ticket {
-          display: block !important;
-        }
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
 
-        body {
-          margin: 0;
-          padding: 0;
-          background: white !important;
-        }
-      }
-    `}
-  </style>
+  .app-screen {
+    display: none !important;
+  }
+
+  .print-ticket {
+    display: block !important;
+    width: 72mm;
+    margin: 0 auto;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: white !important;
+  }
+
+}
+`}
+</style>
 
   {printMode && printOrderData && (
     <Box
       className="print-ticket"
-      sx={{ p: 2, bgcolor: "#fff", color: "#000", minHeight: "100vh" }}
+      sx={{ p: 2, bgcolor: "#fff", color: "#000" }}
     >
       <Box sx={{ maxWidth: 320, mx: "auto", fontFamily: "monospace" }}>
         <Typography align="center" sx={{ fontWeight: 900, fontSize: 20 }}>
