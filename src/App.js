@@ -115,6 +115,30 @@ function hasReachedWarningTime(order) {
   return now >= warnFrom;
 }
 
+function printOrder(order) {
+  const itemsText = (order.items || [])
+    .map((it) => `- ${it.displayName || it.name}  €${Number(it.price || 0).toFixed(2)}`)
+    .join("\n");
+
+  const text =
+`Wrights Food Fayre
+----------------------------
+Order: ${order.code}
+Pickup: ${order.pickupDate} ${order.pickupTime}
+
+Items:
+${itemsText}
+
+----------------------------
+Total: €${Number(order.total || 0).toFixed(2)}
+
+
+`;
+
+  const encoded = encodeURIComponent(text);
+  window.location.href = `rawbt:text,${encoded}`;
+}
+
 function makePickupSlots(now, bufferMin, slotSizeMin, windowHours, limitPerSlot) {
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const startMin = roundUpToSlot(nowMin + bufferMin, slotSizeMin);
@@ -895,19 +919,21 @@ useEffect(() => {
       const addedChanges = snap.docChanges().filter((c) => c.type === "added");
 
       if (addedChanges.length > 0) {
+        const addedOrder = addedChanges[0].doc.data();
         const newId = addedChanges[0].doc.id;
 
         playNewOrderSound();
+        printOrder(addedOrder);
 
         setHighlightedOrderId(newId);
 
         setTimeout(() => {
           setHighlightedOrderId(null);
-        }, 10000); // 10 sec highlight
+        }, 10000);
       }
     }
 
-    // ✅ orders rămâne lista completă; filtrarea se face separat în staffOrders
+    // ✅ actualizează orders pentru UI
     setOrders(list);
   },
   (err) => {
