@@ -115,63 +115,9 @@ function hasReachedWarningTime(order) {
   return now >= warnFrom;
 }
 
-function printOrder(order) {
 
-  const itemsText = (order.items || [])
-    .map(i => `- ${i.name}  €${Number(i.price).toFixed(2)}`)
-    .join("\n");
 
-  const text =
-`Wrights Food Fayre
---------------------------
-Order: ${order.code}
-Pickup: ${order.pickupDate} ${order.pickupTime}
 
-${itemsText}
-
---------------------------
-Total: €${Number(order.total).toFixed(2)}
-
-\n\n`;
-
-  const encoded = encodeURIComponent(text);
-
-  const url =
-`intent://print?text=${encoded}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end`;
-
-  window.location.href = url;
-
-}
-
-function printOrderBrowser(order) {
-  const html = `
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <title>Print Test</title>
-      </head>
-      <body style="font-family: Arial, sans-serif; padding: 20px;">
-        <h2>Wrights Food Fayre</h2>
-        <p>Order: ${order.code}</p>
-        <p>Pickup: ${order.pickupDate} ${order.pickupTime}</p>
-        <p>Total: €${Number(order.total || 0).toFixed(2)}</p>
-      </body>
-    </html>
-  `;
-
-  const w = window.open("", "_blank", "width=420,height=800");
-  if (!w) return;
-
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-
-  setTimeout(() => {
-    w.focus();
-    w.print();
-  }, 1000);
-}
 
 function makePickupSlots(now, bufferMin, slotSizeMin, windowHours, limitPerSlot) {
   const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -297,7 +243,13 @@ const [historySelected, setHistorySelected] = useState(null);
 const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
 const [lateWarningIds, setLateWarningIds] = useState([]);
 const warnedLateOrdersRef = useRef(new Set());
+const [printMode, setPrintMode] = useState(false);
+const [printOrderData, setPrintOrderData] = useState(null);
 
+function printOrderBrowser(order) {
+  setPrintOrderData(order);
+  setPrintMode(true);
+}
 
 const STAFF_FONT_SCALE = isTablet ? 1.35 : 1; // ajustează 1.25 / 1.4 după gust
 useEffect(() => {
@@ -914,6 +866,26 @@ const audioUnlockedRef = useRef(false);
   return hh * 60 + mm;
 }
 
+useEffect(() => {
+  if (!printMode || !printOrderData) return;
+
+  const t = setTimeout(() => {
+    window.print();
+  }, 500);
+
+  return () => clearTimeout(t);
+}, [printMode, printOrderData]);
+
+useEffect(() => {
+  const handleAfterPrint = () => {
+    setPrintMode(false);
+    setPrintOrderData(null);
+  };
+
+  window.addEventListener("afterprint", handleAfterPrint);
+  return () => window.removeEventListener("afterprint", handleAfterPrint);
+}, []);
+
 function isSlotWithinWorkingHours(label) {
   const startMin = slotStartMinutes(label);
   const openMin = 7 * 60;
@@ -928,9 +900,6 @@ useEffect(() => {
     initialOrdersLoadedRef.current = false; // reset când ieși din staff
     return;
   }
-
-
-
   console.log("[ORDERS] subscribing");
 
   const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
@@ -957,7 +926,7 @@ useEffect(() => {
         const newId = addedChanges[0].doc.id;
 
         playNewOrderSound();
-        printOrder(addedOrder);
+        printOrderBrowser(addedOrder);
 
         setHighlightedOrderId(newId);
 
@@ -1376,1006 +1345,1032 @@ useEffect(() => {
 
 return (
   <>
-    <AppBar position="sticky" elevation={1}>
-      <Toolbar>
-        <Typography variant="h6" sx={{ flexGrow: 1 }}>
-          Deli – Quick Order
+   {printMode && printOrderData ? (
+  <Box sx={{ p: 2, bgcolor: "#fff", color: "#000", minHeight: "100vh" }}>
+    <Box sx={{ maxWidth: 320, mx: "auto", fontFamily: "Arial, sans-serif" }}>
+      <Typography align="center" sx={{ fontWeight: 900, fontSize: 22 }}>
+        Wrights Food Fayre
+      </Typography>
+
+      <Typography align="center" sx={{ mb: 1 }}>
+        Kitchen Ticket
+      </Typography>
+
+      <Divider sx={{ my: 1, borderColor: "#000" }} />
+
+      <Typography sx={{ fontWeight: 900 }}>
+        Order: {printOrderData.code}
+      </Typography>
+
+      <Typography>
+        Pickup: {printOrderData.pickupDate} {printOrderData.pickupTime}
+      </Typography>
+
+      <Divider sx={{ my: 1, borderColor: "#000" }} />
+
+      <Typography sx={{ fontWeight: 900, mb: 1 }}>Items</Typography>
+
+      {(printOrderData.items || []).map((it, idx) => (
+        <Box
+          key={idx}
+          sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}
+        >
+          <Typography>{it.displayName || it.name}</Typography>
+          <Typography>€{Number(it.price || 0).toFixed(2)}</Typography>
+        </Box>
+      ))}
+
+      <Divider sx={{ my: 1, borderColor: "#000" }} />
+
+      <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+        <Typography sx={{ fontWeight: 900 }}>Total</Typography>
+        <Typography sx={{ fontWeight: 900 }}>
+          €{Number(printOrderData.total || 0).toFixed(2)}
         </Typography>
-       
-
-
-        {isStaff && staffAllowed && (
-          <Button color="inherit" onClick={staffLogout}>
-            Logout
-          </Button>
-         )}
-
-        {isStaff && (
-          <Button color="inherit" href="/">
-            Back to Client
-          </Button>
-)}
-          {isStaff && staffAllowed && (
-      <Button color="inherit" onClick={() => setQrOpen(true)}>
-        QR
-      </Button>
-        )}
-
-{isStaff && staffAllowed && (
-  <Button
-    color="inherit"
-    onClick={() =>
-      printOrderBrowser({
-        code: "TEST01",
-        pickupDate: "2026-03-08",
-        pickupTime: "12:15 - 12:30",
-        items: [
-          { name: "Breakfast Roll", price: 5 },
-          { name: "Coffee", price: 2.5 }
-        ],
-        total: 7.5
-      })
-    }
-  >
-    Test Print
-  </Button>
-)}
-
-      </Toolbar>
-    </AppBar>
-       <Container maxWidth="lg" sx={{ py: 3 }}>
-      {/* STAFF LOGIN */}
-      {isStaff && !staffAllowed && (
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, mb: 2, maxWidth: 420 }}>
-          <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
-            Staff / Admin Access
-          </Typography>
-
-          <Box component="form" onSubmit={tryStaffLogin} sx={{ display: "grid", gap: 1.5 }}>
-            <TextField
-              label="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-            />
-            <TextField
-              label="Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
-            <Button type="submit" variant="contained" sx={{ fontWeight: 900 }}>
-              Login
-            </Button>
-          </Box>
-
-          <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>
-            Staff access requires login.
-          </Typography>
-        </Paper>
-      )}
-
-      {/* CLIENT UI */}
-      {!isStaff && (
-        <Grid container spacing={2.5} alignItems="flex-start">
-          <Grid item xs={12}>
-            <Box sx={{ maxWidth: 520, mx: "auto" }}>
-             
-              <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>
-                Menu
-              </Typography>
-              <Typography sx={{ opacity: 0.75, mb: 2 }}>
-                Tap an item to add it. Some items can be customized.
-              </Typography>
-              {!isOpen && (
-  <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
-    We are closed now. Orders available daily between <b>07:00</b> – <b>17:00</b>.
-  </Alert>
-)}
-{codeToShow && (
-  <Paper
-    variant="outlined"
-    sx={{
-      p: 1.25,
-      borderRadius: 3,
-      mb: 2,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 1.5
-    }}
-  >
-    <Box sx={{ minWidth: 0 }}>
-      <Typography sx={{ fontWeight: 900 }}>
-        Order code: <span style={{ letterSpacing: 2, fontSize: 18 }}>
-  {codeToShow}
-</span>
-      </Typography>
-      <Typography variant="body2" sx={{ opacity: 0.75 }}>
-        Keep this code to track your order status.
-      </Typography>
-    </Box>
-
-    {statusToShow && (
-      <Chip
-        label={statusLabel}
-color={chipColor(statusLabel)}
-icon={chipIcon(statusLabel)}
-        size="small"
-        sx={{ fontWeight: 900, flexShrink: 0 }}
-      />
-    )}
-    <Button
-  size="small"
-  variant="text"
-  sx={{ fontWeight: 900, flexShrink: 0 }}
-  onClick={() => {
-    setOrderCode("");
-    setPublicOrder(null);
-    localStorage.removeItem("lastOrderCode");
-  }}
->
-  Clear
-</Button>
-  </Paper>
-)}
-
-{orderHistory.length > 0 && (
-  <Paper
-    variant="outlined"
-    sx={{
-      p: 1.25,
-      borderRadius: 3,
-      mb: 2,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 1.5
-    }}
-  >
-    <Box>
-      <Typography sx={{ fontWeight: 900 }}>
-        Recent orders
-      </Typography>
-      <Typography variant="body2" sx={{ opacity: 0.75 }}>
-        {orderHistory.length} saved order{orderHistory.length === 1 ? "" : "s"}
-      </Typography>
-    </Box>
-
-    <Button
-      size="small"
-      variant="outlined"
-      sx={{ fontWeight: 900, borderRadius: 999 }}
-      onClick={() => setHistoryDrawerOpen(true)}
-    >
-      View
-    </Button>
-  </Paper>
-)}
-<Drawer
-  anchor="bottom"
-  open={historyDrawerOpen}
-  onClose={() => setHistoryDrawerOpen(false)}
-  PaperProps={{
-    sx: {
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      pb: 0,
-      maxHeight: "85vh"
-    }
-  }}
->
-  <Box sx={{ display: "flex", flexDirection: "column", height: "85vh" }}>
-    <Box sx={{ p: 2 }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-  <Typography variant="h6" sx={{ fontWeight: 900 }}>
-    Recent orders
-  </Typography>
-
-  <Stack direction="row" spacing={1} alignItems="center">
-    <Button
-      size="small"
-      variant="text"
-      sx={{ fontWeight: 900 }}
-      onClick={() => saveOrderHistory([])}
-    >
-      Clear
-    </Button>
-
-    <IconButton onClick={() => setHistoryDrawerOpen(false)}>
-      <CloseIcon />
-    </IconButton>
-  </Stack>
-</Stack>
-
-      <Divider sx={{ mt: 2 }} />
-    </Box>
-
-    <Box sx={{ px: 2, pb: 2, overflow: "auto" }}>
-      <Box
-  sx={{
-    width: 40,
-    height: 4,
-    background: "#ccc",
-    borderRadius: 2,
-    mx: "auto",
-    mb: 1
-  }}
-/>
-      <Stack spacing={1}>
-        {orderHistory.slice(0, ORDER_HISTORY_MAX).map((o) => (
-          <Paper key={o.code} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
-            <Stack spacing={1}>
-              <Box>
-                <Typography sx={{ fontWeight: 900, letterSpacing: 2 }}>
-                  {o.code}
-                </Typography>
-
-                <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                  {formatShortDate(o.pickupDate)} • {o.pickupTime} • {formatEUR(o.total)}
-                </Typography>
-
-                <Typography variant="body2" sx={{ opacity: 0.75 }} noWrap>
-                  {(o.items || []).map((it) => it.name).join(", ")}
-                </Typography>
-              </Box>
-
-              <Stack direction="row" spacing={1} flexWrap="wrap">
-                <Button
-                  size="small"
-                  variant="outlined"
-                  sx={{ fontWeight: 900 }}
-                  onClick={() => {
-                    setOrderCode(o.code);
-                    localStorage.setItem("lastOrderCode", o.code);
-                    setSnack({ open: true, msg: `Tracking ${o.code}` });
-                    setHistoryDrawerOpen(false);
-                  }}
-                >
-                  Track
-                </Button>
-
-                <Button
-  size="small"
-  variant="contained"
-  sx={{ fontWeight: 900 }}
-  onClick={() => {
-    const itemsToAdd = (o.items || []).map((it) => ({
-      name: it.name,
-      displayName: it.name,
-      price: it.price
-    }));
-
-    setCart((prev) => [...prev, ...itemsToAdd]);
-
-    // UX flow
-    setHistoryDrawerOpen(false); // închide history
-    setCartOpen(true);           // deschide cart
-
-    setSnack({ open: true, msg: "Added to cart" });
-  }}
->
-  Reorder
-</Button>
-
-                <Button
-                  size="small"
-                  variant="text"
-                  sx={{ fontWeight: 900 }}
-                  onClick={() => {
-                    setHistorySelected(o);
-                    setHistoryOpen(true);
-                  }}
-                >
-                  Details
-                </Button>
-              </Stack>
-            </Stack>
-          </Paper>
-        ))}
-      </Stack>
+      </Box>
     </Box>
   </Box>
-</Drawer>
-              {/* Categories (top buttons) */}
-              <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
-                {CATEGORIES.map((c) => (
-                  <Button
-                    key={c.key}
-                    variant={activeCategory === c.key ? "contained" : "outlined"}
-                    onClick={() => setActiveCategory(c.key)}
-                    sx={{ borderRadius: 999, fontWeight: 900 }}
-                  >
-                    {c.label}
-                  </Button>
-                ))}
-              </Stack>
+) : (
+   
+    <><AppBar position="sticky" elevation={1}>
+          <Toolbar>
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>
+              Deli – Quick Order
+            </Typography>
 
-              {/* Products list (ONLY active category) */}
-              <Stack spacing={1.2}>
-                {productsDb
-  .filter((p) => getCategory(p) === activeCategory)
-  .map((product) => {
-    const isConfigurable =
-      !!product?.config &&
-      (product.config?.salads?.enabled ||
-        (product.config?.options?.length ?? 0) > 0);
 
-    const isOut = product.active === false;
 
-    return (
-      <Fade in timeout={300} key={product.id}>
-        <Paper
-          variant="outlined"
-          sx={{
-            p: 1.25,
-            borderRadius: 3,
-    position: "relative", 
-    opacity: isOut ? 0.55 : 1,
-    transition: "all 0.2s ease",
-            ...(isOut
-              ? {}
-              : {
-                  "&:hover": {
-                    transform: "scale(1.02)",
-                    boxShadow: 3
-                  },
-                  "&:active": {
-                    transform: "scale(0.98)"
-                  }
-                })
-          }}
-        >
-          {isOut && (
-  <Chip
-  label="Out of stock"
-  size="small"
-  sx={{
-    position: "absolute",
-    top: -10,
-    right: 10,
-    fontWeight: 800,
-    bgcolor: "#111",
-    color: "#fff",
-    zIndex: 2
-  }}
-/>
-)}
-          <Stack
-            direction="row"
-            alignItems="center"
-            justifyContent="space-between"
-            spacing={2}
-          >
-            <Box>
-              <Typography sx={{ fontWeight: 900 }}>
-                {product.name}
-              </Typography>
+            {isStaff && staffAllowed && (
+              <Button color="inherit" onClick={staffLogout}>
+                Logout
+              </Button>
+            )}
 
-              <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                {formatEUR(product.price)}
-                
-              </Typography>
-            </Box>
+            {isStaff && (
+              <Button color="inherit" href="/">
+                Back to Client
+              </Button>
+            )}
+            {isStaff && staffAllowed && (
+              <Button color="inherit" onClick={() => setQrOpen(true)}>
+                QR
+              </Button>
+            )}
 
-            {!isOut && (
-  <Button
-    variant={isConfigurable ? "outlined" : "contained"}
-    sx={{
-      borderRadius: 999,
-      fontWeight: 900,
-      px: 2,
-      textTransform: "none",
-      boxShadow: isConfigurable ? 0 : 2
-    }}
-    disabled={!isOpen || isOut}
-    onClick={() => {
-      if (isConfigurable) openConfigurator(product);
-      else addToCart(product);
-    }}
-  >
-    {isConfigurable ? "Customize →" : "Add +"}
-  </Button>
-)}
-          </Stack>
-        </Paper>
-      </Fade>
-    );
-  })}
-              </Stack>
-            </Box>
-          </Grid>
+            {isStaff && staffAllowed && (
+              <Button
+                color="inherit"
+                onClick={() => printOrderBrowser({
+                  code: "TEST01",
+                  pickupDate: "2026-03-08",
+                  pickupTime: "12:15 - 12:30",
+                  items: [
+                    { name: "Breakfast Roll", price: 5 },
+                    { name: "Coffee", price: 2.5 }
+                  ],
+                  total: 7.5
+                })}
+              >
+                Test Print
+              </Button>
+            )}
 
-          {/* 🔥 CART BAR (sticky bottom) */}
-          {cart.length > 0 && !cartOpen && !configOpen && (
-            <Paper
-              elevation={6}
-              sx={{
-                position: "fixed",
-                left: 12,
-                right: 12,
-                bottom: 12,
-                borderRadius: 999,
-                px: 1.5,
-                py: 1,
-                zIndex: (theme) => theme.zIndex.modal - 1
-              }}
-            >
-              <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-                <Box>
-                  <Typography sx={{ fontWeight: 900, lineHeight: 1.1 }}>
-                    Cart • {cart.length} item{cart.length === 1 ? "" : "s"}
-                  </Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                    Total: {formatEUR(total)}
-                  </Typography>
-                </Box>
-
-                <Button
-                  variant="contained"
-                  sx={{ borderRadius: 999, fontWeight: 900, px: 2.2 }}
-                  onClick={() => setCartOpen(true)}
-                >
-                  Checkout
-                </Button>
-              </Stack>
-            </Paper>
-          )}
-
-          {/* 🧺 CART DRAWER */}
-          <Drawer
-            anchor="bottom"
-            open={cartOpen}
-            onClose={() => setCartOpen(false)}
-            PaperProps={{
-              sx: {
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                pb: 0,
-                maxHeight: "92vh"
-              }
-            }}
-          >
-            <Box sx={{ display: "flex", flexDirection: "column", height: "92vh" }}>
-              {/* HEADER */}
-              <Box sx={{ p: 2 }}>
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                    Your Cart
-                  </Typography>
-
-                  <IconButton onClick={() => setCartOpen(false)}>
-                    <CloseIcon />
-                  </IconButton>
-                </Stack>
-                <Divider sx={{ mt: 2 }} />
-              </Box>
-
-              {/* SCROLL AREA */}
-              <Box sx={{ px: 2, pb: 2, overflow: "auto" }}>
-                {cart.length === 0 ? (
-                  <Typography sx={{ opacity: 0.75 }}>Your cart is empty.</Typography>
-                ) : (
-                  <Stack spacing={1}>
-                    {cart.map((item, index) => (
-                      <Paper
-    key={item.id ?? index}
-    variant="outlined"
-    sx={{
-      p: 1.25,
-      borderRadius: 3,
-      transition: "all 0.2s ease",
-      "&:active": { transform: "scale(0.98)" }
-    }}
-  >
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          alignItems="flex-start"
-                          justifyContent="space-between"
-                        >
-                          <Box sx={{ pr: 1 }}>
-                            <Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
-                              {item.displayName || item.name}
-                            </Typography>
-                            <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                              {formatEUR(item.price)}
-                            </Typography>
-                          </Box>
-
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="error"
-                            sx={{ borderRadius: 2, minWidth: 0, px: 1.2 }}
-                            onClick={() => removeFromCart(index)}
-                          >
-                            X
-                          </Button>
-                        </Stack>
-                      </Paper>
-                    ))}
-                  </Stack>
-                )}
-
-                <Divider sx={{ my: 2 }} />
-
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography sx={{ fontWeight: 900, fontSize: 18 }}>Total</Typography>
-                  <Typography sx={{ fontWeight: 900, fontSize: 18 }}>{formatEUR(total)}</Typography>
-                </Stack>
-
-                <Divider sx={{ my: 2 }} />
-
+          </Toolbar>
+        </AppBar><Container maxWidth="lg" sx={{ py: 3 }}>
+            {/* STAFF LOGIN */}
+            {isStaff && !staffAllowed && (
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, mb: 2, maxWidth: 420 }}>
                 <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
-                  Pickup time
+                  Staff / Admin Access
                 </Typography>
 
-<Typography variant="body2" sx={{ opacity: 0.75, mb: 1 }}>
-  Available daily between 07:00 – 17:00.
-</Typography>
+                <Box component="form" onSubmit={tryStaffLogin} sx={{ display: "grid", gap: 1.5 }}>
+                  <TextField
+                    label="Email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="username" />
+                  <TextField
+                    label="Password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password" />
+                  <Button type="submit" variant="contained" sx={{ fontWeight: 900 }}>
+                    Login
+                  </Button>
+                </Box>
 
-                <Stack spacing={1}>
-                  {pickupSlots
-  .filter((slot) => isSlotWithinWorkingHours(slot.label))
-  .map((slot) => {
-                    const used = ordersCountForSlot(slot.label);
-                    const isFull = used >= slot.limit;
-                    const isPast = isSlotInPast(slot.label);
-                    
-                    const disabledSlot = isFull || isPast;
-                    const selected = pickupSlot?.label === slot.label;
+                <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>
+                  Staff access requires login.
+                </Typography>
+              </Paper>
+            )}
 
-                    return (
+            {/* CLIENT UI */}
+            {!isStaff && (
+              <Grid container spacing={2.5} alignItems="flex-start">
+                <Grid item xs={12}>
+                  <Box sx={{ maxWidth: 520, mx: "auto" }}>
+
+                    <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>
+                      Menu
+                    </Typography>
+                    <Typography sx={{ opacity: 0.75, mb: 2 }}>
+                      Tap an item to add it. Some items can be customized.
+                    </Typography>
+                    {!isOpen && (
+                      <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
+                        We are closed now. Orders available daily between <b>07:00</b> – <b>17:00</b>.
+                      </Alert>
+                    )}
+                    {codeToShow && (
                       <Paper
-                        key={slot.label}
                         variant="outlined"
                         sx={{
                           p: 1.25,
-                          borderRadius: 2,
-                          opacity: disabledSlot ? 0.6 : 1,
-borderWidth: selected ? 2 : 1,
-backgroundColor: isFull ? "#fff5f5" : "transparent",
+                          borderRadius: 3,
+                          mb: 2,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 1.5
                         }}
                       >
-                        <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                          <input
-                            type="radio"
-                            name="pickup"
-                            value={slot.label}
-                            checked={selected}
-                            disabled={disabledSlot}
-                            onChange={() => {
-                              setPickupSlot(slot);
-                              
-                            }}
-                          />
-                          <div>
-                            <div style={{ fontWeight: 900 }}>{slot.label}</div>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
-  <span style={{ opacity: 0.75, fontSize: 13 }}>
-    {used}/{slot.limit} booked
-  </span>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontWeight: 900 }}>
+                            Order code: <span style={{ letterSpacing: 2, fontSize: 18 }}>
+                              {codeToShow}
+                            </span>
+                          </Typography>
+                          <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                            Keep this code to track your order status.
+                          </Typography>
+                        </Box>
 
-  <span
-    style={{
-      fontSize: 12,
-      fontWeight: 900,
-      padding: "2px 8px",
-      borderRadius: 999,
-      background: isFull ? "#ffebee" : isPast ? "#eeeeee" : "#e8f5e9",
-      color: isFull ? "#c62828" : isPast ? "#616161" : "#2e7d32"
-    }}
-  >
-    {isFull ? "FULL" : isPast ? "CLOSED" : "AVAILABLE"}
-  </span>
-</div>
-                          </div>
-                        </label>
+                        {statusToShow && (
+                          <Chip
+                            label={statusLabel}
+                            color={chipColor(statusLabel)}
+                            icon={chipIcon(statusLabel)}
+                            size="small"
+                            sx={{ fontWeight: 900, flexShrink: 0 }} />
+                        )}
+                        <Button
+                          size="small"
+                          variant="text"
+                          sx={{ fontWeight: 900, flexShrink: 0 }}
+                          onClick={() => {
+                            setOrderCode("");
+                            setPublicOrder(null);
+                            localStorage.removeItem("lastOrderCode");
+                          } }
+                        >
+                          Clear
+                        </Button>
                       </Paper>
-                    );
-                  })}
-                </Stack>
-              </Box>
+                    )}
 
-              {/* STICKY FOOTER */}
-              <Box
-                sx={{
-                  p: 2,
-                  pt: 1.5,
-                  borderTop: "1px solid rgba(0,0,0,0.08)",
-                  backgroundColor: "background.paper"
-                }}
-              >
-                <Button
-                  fullWidth
-                  variant="contained"
-                  sx={{ borderRadius: 2, py: 1.2, fontWeight: 900 }}
-                  disabled={!canPlaceOrder}
-                  onClick={async () => {
-                    await placeOrder();
-                    setCartOpen(false);
-                  }}
-                >
-                  Pay & Place order
-                </Button>
+                    {orderHistory.length > 0 && (
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 1.25,
+                          borderRadius: 3,
+                          mb: 2,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 1.5
+                        }}
+                      >
+                        <Box>
+                          <Typography sx={{ fontWeight: 900 }}>
+                            Recent orders
+                          </Typography>
+                          <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                            {orderHistory.length} saved order{orderHistory.length === 1 ? "" : "s"}
+                          </Typography>
+                        </Box>
 
-{cart.length === 0 && (
-  <Button
-    fullWidth
-    variant="outlined"
-    sx={{ mt: 1, borderRadius: 2, py: 1.1, fontWeight: 900 }}
-    onClick={() => setCartOpen(false)}
-  >
-    Close
-  </Button>
-)}
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontWeight: 900, borderRadius: 999 }}
+                          onClick={() => setHistoryDrawerOpen(true)}
+                        >
+                          View
+                        </Button>
+                      </Paper>
+                    )}
+                    <Drawer
+                      anchor="bottom"
+                      open={historyDrawerOpen}
+                      onClose={() => setHistoryDrawerOpen(false)}
+                      PaperProps={{
+                        sx: {
+                          borderTopLeftRadius: 20,
+                          borderTopRightRadius: 20,
+                          pb: 0,
+                          maxHeight: "85vh"
+                        }
+                      }}
+                    >
+                      <Box sx={{ display: "flex", flexDirection: "column", height: "85vh" }}>
+                        <Box sx={{ p: 2 }}>
+                          <Stack direction="row" alignItems="center" justifyContent="space-between">
+                            <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                              Recent orders
+                            </Typography>
 
-                {!canPlaceOrder && (
-                  <Typography sx={{ mt: 1, opacity: 0.75 }}>
-                    Add items and choose a pickup time.
-                  </Typography>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <Button
+                                size="small"
+                                variant="text"
+                                sx={{ fontWeight: 900 }}
+                                onClick={() => saveOrderHistory([])}
+                              >
+                                Clear
+                              </Button>
+
+                              <IconButton onClick={() => setHistoryDrawerOpen(false)}>
+                                <CloseIcon />
+                              </IconButton>
+                            </Stack>
+                          </Stack>
+
+                          <Divider sx={{ mt: 2 }} />
+                        </Box>
+
+                        <Box sx={{ px: 2, pb: 2, overflow: "auto" }}>
+                          <Box
+                            sx={{
+                              width: 40,
+                              height: 4,
+                              background: "#ccc",
+                              borderRadius: 2,
+                              mx: "auto",
+                              mb: 1
+                            }} />
+                          <Stack spacing={1}>
+                            {orderHistory.slice(0, ORDER_HISTORY_MAX).map((o) => (
+                              <Paper key={o.code} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+                                <Stack spacing={1}>
+                                  <Box>
+                                    <Typography sx={{ fontWeight: 900, letterSpacing: 2 }}>
+                                      {o.code}
+                                    </Typography>
+
+                                    <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                                      {formatShortDate(o.pickupDate)} • {o.pickupTime} • {formatEUR(o.total)}
+                                    </Typography>
+
+                                    <Typography variant="body2" sx={{ opacity: 0.75 }} noWrap>
+                                      {(o.items || []).map((it) => it.name).join(", ")}
+                                    </Typography>
+                                  </Box>
+
+                                  <Stack direction="row" spacing={1} flexWrap="wrap">
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      sx={{ fontWeight: 900 }}
+                                      onClick={() => {
+                                        setOrderCode(o.code);
+                                        localStorage.setItem("lastOrderCode", o.code);
+                                        setSnack({ open: true, msg: `Tracking ${o.code}` });
+                                        setHistoryDrawerOpen(false);
+                                      } }
+                                    >
+                                      Track
+                                    </Button>
+
+                                    <Button
+                                      size="small"
+                                      variant="contained"
+                                      sx={{ fontWeight: 900 }}
+                                      onClick={() => {
+                                        const itemsToAdd = (o.items || []).map((it) => ({
+                                          name: it.name,
+                                          displayName: it.name,
+                                          price: it.price
+                                        }));
+
+                                        setCart((prev) => [...prev, ...itemsToAdd]);
+
+                                        // UX flow
+                                        setHistoryDrawerOpen(false); // închide history
+                                        setCartOpen(true); // deschide cart
+
+                                        setSnack({ open: true, msg: "Added to cart" });
+                                      } }
+                                    >
+                                      Reorder
+                                    </Button>
+
+                                    <Button
+                                      size="small"
+                                      variant="text"
+                                      sx={{ fontWeight: 900 }}
+                                      onClick={() => {
+                                        setHistorySelected(o);
+                                        setHistoryOpen(true);
+                                      } }
+                                    >
+                                      Details
+                                    </Button>
+                                  </Stack>
+                                </Stack>
+                              </Paper>
+                            ))}
+                          </Stack>
+                        </Box>
+                      </Box>
+                    </Drawer>
+                    {/* Categories (top buttons) */}
+                    <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
+                      {CATEGORIES.map((c) => (
+                        <Button
+                          key={c.key}
+                          variant={activeCategory === c.key ? "contained" : "outlined"}
+                          onClick={() => setActiveCategory(c.key)}
+                          sx={{ borderRadius: 999, fontWeight: 900 }}
+                        >
+                          {c.label}
+                        </Button>
+                      ))}
+                    </Stack>
+
+                    {/* Products list (ONLY active category) */}
+                    <Stack spacing={1.2}>
+                      {productsDb
+                        .filter((p) => getCategory(p) === activeCategory)
+                        .map((product) => {
+                          const isConfigurable = !!product?.config &&
+                            (product.config?.salads?.enabled ||
+                              (product.config?.options?.length ?? 0) > 0);
+
+                          const isOut = product.active === false;
+
+                          return (
+                            <Fade in timeout={300} key={product.id}>
+                              <Paper
+                                variant="outlined"
+                                sx={{
+                                  p: 1.25,
+                                  borderRadius: 3,
+                                  position: "relative",
+                                  opacity: isOut ? 0.55 : 1,
+                                  transition: "all 0.2s ease",
+                                  ...(isOut
+                                    ? {}
+                                    : {
+                                      "&:hover": {
+                                        transform: "scale(1.02)",
+                                        boxShadow: 3
+                                      },
+                                      "&:active": {
+                                        transform: "scale(0.98)"
+                                      }
+                                    })
+                                }}
+                              >
+                                {isOut && (
+                                  <Chip
+                                    label="Out of stock"
+                                    size="small"
+                                    sx={{
+                                      position: "absolute",
+                                      top: -10,
+                                      right: 10,
+                                      fontWeight: 800,
+                                      bgcolor: "#111",
+                                      color: "#fff",
+                                      zIndex: 2
+                                    }} />
+                                )}
+                                <Stack
+                                  direction="row"
+                                  alignItems="center"
+                                  justifyContent="space-between"
+                                  spacing={2}
+                                >
+                                  <Box>
+                                    <Typography sx={{ fontWeight: 900 }}>
+                                      {product.name}
+                                    </Typography>
+
+                                    <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                                      {formatEUR(product.price)}
+
+                                    </Typography>
+                                  </Box>
+
+                                  {!isOut && (
+                                    <Button
+                                      variant={isConfigurable ? "outlined" : "contained"}
+                                      sx={{
+                                        borderRadius: 999,
+                                        fontWeight: 900,
+                                        px: 2,
+                                        textTransform: "none",
+                                        boxShadow: isConfigurable ? 0 : 2
+                                      }}
+                                      disabled={!isOpen || isOut}
+                                      onClick={() => {
+                                        if (isConfigurable) openConfigurator(product);
+                                        else addToCart(product);
+                                      } }
+                                    >
+                                      {isConfigurable ? "Customize →" : "Add +"}
+                                    </Button>
+                                  )}
+                                </Stack>
+                              </Paper>
+                            </Fade>
+                          );
+                        })}
+                    </Stack>
+                  </Box>
+                </Grid>
+
+                {/* 🔥 CART BAR (sticky bottom) */}
+                {cart.length > 0 && !cartOpen && !configOpen && (
+                  <Paper
+                    elevation={6}
+                    sx={{
+                      position: "fixed",
+                      left: 12,
+                      right: 12,
+                      bottom: 12,
+                      borderRadius: 999,
+                      px: 1.5,
+                      py: 1,
+                      zIndex: (theme) => theme.zIndex.modal - 1
+                    }}
+                  >
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 900, lineHeight: 1.1 }}>
+                          Cart • {cart.length} item{cart.length === 1 ? "" : "s"}
+                        </Typography>
+                        <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                          Total: {formatEUR(total)}
+                        </Typography>
+                      </Box>
+
+                      <Button
+                        variant="contained"
+                        sx={{ borderRadius: 999, fontWeight: 900, px: 2.2 }}
+                        onClick={() => setCartOpen(true)}
+                      >
+                        Checkout
+                      </Button>
+                    </Stack>
+                  </Paper>
                 )}
 
-                {publicOrder && (() => {
-  const st = normalizeStatus(publicOrder.status);
+                {/* 🧺 CART DRAWER */}
+                <Drawer
+                  anchor="bottom"
+                  open={cartOpen}
+                  onClose={() => setCartOpen(false)}
+                  PaperProps={{
+                    sx: {
+                      borderTopLeftRadius: 20,
+                      borderTopRightRadius: 20,
+                      pb: 0,
+                      maxHeight: "92vh"
+                    }
+                  }}
+                >
+                  <Box sx={{ display: "flex", flexDirection: "column", height: "92vh" }}>
+                    {/* HEADER */}
+                    <Box sx={{ p: 2 }}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between">
+                        <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                          Your Cart
+                        </Typography>
 
-  return (
-    <Paper
-      variant="outlined"
-      sx={{
-        mt: 1.5,
-        p: 1.25,
-        borderRadius: 2,
-        borderWidth: st === STATUS.READY ? 2 : 1,
-        opacity: 0.95,
-        background:
-          st === STATUS.READY
-            ? "#e8f5e9"
-            : st === STATUS.IN_PROGRESS
-            ? "#fff8e1"
-            : "#e3f2fd"
-      }}
-    >
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography sx={{ fontWeight: 900 }}>
-          Status: {st}
-        </Typography>
-
-        <Chip
-          label={st}
-          color={chipColor(st)}
-          icon={chipIcon(st)}
-          size="small"
-        />
-      </Stack>
-
-      {st === STATUS.READY && (
-        <Typography sx={{ mt: 0.5, fontWeight: 800 }}>
-          ✅ Ready for pickup!
-        </Typography>
-      )}
-    </Paper>
-  );
-})()}
-              </Box>
-            </Box>
-          </Drawer>
-        </Grid>
-      )}
-
-      {/* STAFF UI */}
-      {isStaff && staffAllowed && (
-        <Box>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2, flexWrap: "wrap" }}>
-            <Tabs value={staffTab} onChange={(_, v) => setStaffTab(v)}>
-  <Tab label="Orders" value="orders" />
-  {isAdminRole && <Tab label="Products" value="products" />}
-  {isAdminRole && <Tab label="Reports" value="reports" />} {/* 🔥 ASTA ADAUGI */}
-</Tabs>
-
-
-
-            {staffTab === "orders" && (
-              <FormControlLabel
-                sx={{ ml: "auto" }}
-                control={
-                  <Checkbox
-                    checked={showOnlyOpen}
-                    onChange={(e) => setShowOnlyOpen(e.target.checked)}
-                  />
-                }
-                label="Only open orders"
-              />
-            )}
-          </Stack>
-
-          <Divider sx={{ mb: 2 }} />
-
-          {staffTab === "orders" && (
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
-                Orders (live)
-              </Typography>
-
-              {staffOrders.length === 0 && (
-                <Typography sx={{ opacity: 0.7 }}>No orders yet.</Typography>
-              )}
-
-              {staffOrders.map((order) => (
-              <Card
-  key={order.id}
-  sx={{
-    mb: 2,
-    borderRadius: 3,
-    p: isTablet ? 1 : 0,
-    backgroundColor:
-      lateWarningIds.includes(order.id)
-        ? "#ffebee"
-        : order.id === highlightedOrderId
-        ? "#e8f5e9"
-        : "background.paper",
-    border:
-      lateWarningIds.includes(order.id)
-        ? "2px solid #d32f2f"
-        : "1px solid rgba(0,0,0,0.12)",
-    transition: "background-color 0.5s ease, border 0.3s ease",
-    animation: lateWarningIds.includes(order.id)
-      ? "latePulse 1.5s infinite"
-      : "none",
-
-    "@keyframes latePulse": {
-      "0%": { boxShadow: "0 0 0 0 rgba(211,47,47,0.6)" },
-      "70%": { boxShadow: "0 0 0 10px rgba(211,47,47,0)" },
-      "100%": { boxShadow: "0 0 0 0 rgba(211,47,47,0)" }
-    }
-  }}
->
-                  <CardContent sx={{ p: isTablet ? 2.5 : 2 }}>
-                    <Stack
-  direction="row"
-  spacing={2}
-  alignItems="flex-start"
-  justifyContent="space-between"
-  flexWrap="wrap"
->
-  {/* LEFT: date + slot */}
-  <Box sx={{ minWidth: 220 }}>
-    <Typography sx={{ fontWeight: 900, fontSize: 18 * STAFF_FONT_SCALE, lineHeight: 1.1 }}>
-      {formatPickupDateShort(order.pickupDate)}
-    </Typography>
-
-    <Typography sx={{ fontWeight: 900, fontSize: 20 * STAFF_FONT_SCALE, lineHeight: 1.1 }}>
-      {order.pickupTime}
-    </Typography>
-  </Box>
-
-  {/* CENTER: status chip */}
-  <Chip
-    icon={chipIcon(order.status)}
-    label={order.status}
-    color={chipColor(order.status)}
-    variant="filled"
-    sx={{
-      fontWeight: 900,
-      fontSize: 14 * STAFF_FONT_SCALE,
-      px: 1.2,
-      py: 2.2,
-      borderRadius: 999
-    }}
-  />
-
-  {/* RIGHT: order code BIG */}
-  <Box sx={{ textAlign: "right" }}>
-    <Typography
-      sx={{
-        fontWeight: 1000,
-        letterSpacing: 3,
-        fontSize: 26 * STAFF_FONT_SCALE,
-        lineHeight: 1
-      }}
-    >
-      {order.code}
-    </Typography>
-    <Typography sx={{ opacity: 0.7, fontSize: 12 * STAFF_FONT_SCALE }}>
-      Order Code
-    </Typography>
-  </Box>
-</Stack>
-
-                    <Chip
-  label={`Total: ${formatEUR(order.total)}`}
-  sx={{
-    mt: 1.2,
-    fontWeight: 1000,
-    fontSize: 14 * STAFF_FONT_SCALE,
-    px: 1.2,
-    py: 2,
-    borderRadius: 999
-  }}
-/>
-
-                    <Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
-                    {(order.items || []).map((it, idx) => (
-                      <Typography
-  key={idx}
-  sx={{ fontSize: 14 * STAFF_FONT_SCALE, fontWeight: 800, lineHeight: 1.35 }}
-  >
-                        - {it.displayName || it.name} ({formatEUR(it.price)})
-                      </Typography>
-                    ))}
-
-                    <Box
-  sx={{
-    position: "sticky",
-    top: 64,
-    zIndex: 10,
-    bgcolor: "background.paper",
-    pb: 1,
-    mb: 2
-  }}
->
-  <Stack direction="row" spacing={1} sx={{ overflowX: "auto" }}>
-    
-                      <Button
-  variant="outlined"
-  sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-  onClick={() => setStatus(order.id, order.code, STATUS.NEW)}
->
-  New
-</Button>
-
-<Button
-  variant="outlined"
-  sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-  onClick={() => setStatus(order.id, order.code, STATUS.IN_PROGRESS)}
->
-  In progress
-</Button>
-
-<Button
-  variant="contained"
-  sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-  onClick={() => {
-    if (!window.confirm("Mark this order as READY for pickup?")) return;
-    setStatus(order.id, order.code, STATUS.READY);
-  }}
->
-  Ready
-</Button>
-                    </Stack>
+                        <IconButton onClick={() => setCartOpen(false)}>
+                          <CloseIcon />
+                        </IconButton>
+                      </Stack>
+                      <Divider sx={{ mt: 2 }} />
                     </Box>
-                  </CardContent>
-                </Card>
-              ))}
-            </Box>
-          )}
 
-          {staffTab === "products" && isAdminRole && (
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
-                Products (Admin)
-              </Typography>
+                    {/* SCROLL AREA */}
+                    <Box sx={{ px: 2, pb: 2, overflow: "auto" }}>
+                      {cart.length === 0 ? (
+                        <Typography sx={{ opacity: 0.75 }}>Your cart is empty.</Typography>
+                      ) : (
+                        <Stack spacing={1}>
+                          {cart.map((item, index) => (
+                            <Paper
+                              key={item.id ?? index}
+                              variant="outlined"
+                              sx={{
+                                p: 1.25,
+                                borderRadius: 3,
+                                transition: "all 0.2s ease",
+                                "&:active": { transform: "scale(0.98)" }
+                              }}
+                            >
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                alignItems="flex-start"
+                                justifyContent="space-between"
+                              >
+                                <Box sx={{ pr: 1 }}>
+                                  <Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
+                                    {item.displayName || item.name}
+                                  </Typography>
+                                  <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                                    {formatEUR(item.price)}
+                                  </Typography>
+                                </Box>
 
-              <Card sx={{ borderRadius: 3, mb: 2 }}>
-                <CardContent>
-                  <Typography sx={{ fontWeight: 800, mb: 1 }}>Add product</Typography>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="error"
+                                  sx={{ borderRadius: 2, minWidth: 0, px: 1.2 }}
+                                  onClick={() => removeFromCart(index)}
+                                >
+                                  X
+                                </Button>
+                              </Stack>
+                            </Paper>
+                          ))}
+                        </Stack>
+                      )}
 
-                  <Box
-                    component="form"
-                    onSubmit={addProduct}
-                    sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}
-                  >
-                    <TextField
-                      label="Name"
-                      value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
-                      size="small"
-                    />
-                    <TextField
-  select
-  label="Category"
-  value={newCategory}
-  onChange={(e) => setNewCategory(e.target.value)}
-  size="small"
-  sx={{ width: 160 }}
->
-  <MenuItem value="rolls">ROLLS</MenuItem>
-  <MenuItem value="sides">SIDES</MenuItem>
-  <MenuItem value="drinks">DRINKS</MenuItem>
-</TextField>
-                    <TextField
-                      label="Price"
-                      value={newPrice}
-                      onChange={(e) => setNewPrice(e.target.value)}
-                      size="small"
-                      sx={{ width: 140 }}
-                    />
-                    <Button type="submit" variant="contained">
-                      Add
-                    </Button>
-                  </Box>
-                </CardContent>
-              </Card>
+                      <Divider sx={{ my: 2 }} />
 
-              {productsDb.length === 0 && (
-                <Typography sx={{ opacity: 0.7 }}>No products yet.</Typography>
-              )}
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography sx={{ fontWeight: 900, fontSize: 18 }}>Total</Typography>
+                        <Typography sx={{ fontWeight: 900, fontSize: 18 }}>{formatEUR(total)}</Typography>
+                      </Stack>
 
-              {productsDb.map((p) => (
-                <Card key={p.id} sx={{ mb: 2, borderRadius: 3 }}>
-                  <CardContent>
-                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                      <Typography sx={{ fontWeight: 800 }}>{p.name}</Typography>
-                      <Chip
-  size="small"
-  label={p.active === false ? "Out of stock" : "Available"}
-  color={p.active === false ? "default" : "success"}
-  variant={p.active === false ? "outlined" : "filled"}
-/>
-                    </Stack>
+                      <Divider sx={{ my: 2 }} />
 
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }} flexWrap="wrap">
-                      <Typography variant="body2">Price:</Typography>
-                      <TextField
-                        defaultValue={p.price}
-                        size="small"
-                        sx={{ width: 140 }}
-                        onBlur={(e) => updateProductPrice(p, e.target.value)}
-                        disabled={!isAdminRole}
-                      />
-<TextField
-    select
-    label="Category"
-    size="small"
-    value={getCategory(p)}
-    sx={{ width: 160 }}
-    onChange={(e) => updateProductCategory(p, e.target.value)}
-    disabled={!isAdminRole}
-  >
-    <MenuItem value="rolls">ROLLS</MenuItem>
-    <MenuItem value="sides">SIDES</MenuItem>
-    <MenuItem value="drinks">DRINKS</MenuItem>
-  </TextField>
+                      <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>
+                        Pickup time
+                      </Typography>
+
+                      <Typography variant="body2" sx={{ opacity: 0.75, mb: 1 }}>
+                        Available daily between 07:00 – 17:00.
+                      </Typography>
+
+                      <Stack spacing={1}>
+                        {pickupSlots
+                          .filter((slot) => isSlotWithinWorkingHours(slot.label))
+                          .map((slot) => {
+                            const used = ordersCountForSlot(slot.label);
+                            const isFull = used >= slot.limit;
+                            const isPast = isSlotInPast(slot.label);
+
+                            const disabledSlot = isFull || isPast;
+                            const selected = pickupSlot?.label === slot.label;
+
+                            return (
+                              <Paper
+                                key={slot.label}
+                                variant="outlined"
+                                sx={{
+                                  p: 1.25,
+                                  borderRadius: 2,
+                                  opacity: disabledSlot ? 0.6 : 1,
+                                  borderWidth: selected ? 2 : 1,
+                                  backgroundColor: isFull ? "#fff5f5" : "transparent",
+                                }}
+                              >
+                                <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                                  <input
+                                    type="radio"
+                                    name="pickup"
+                                    value={slot.label}
+                                    checked={selected}
+                                    disabled={disabledSlot}
+                                    onChange={() => {
+                                      setPickupSlot(slot);
+
+                                    } } />
+                                  <div>
+                                    <div style={{ fontWeight: 900 }}>{slot.label}</div>
+                                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
+                                      <span style={{ opacity: 0.75, fontSize: 13 }}>
+                                        {used}/{slot.limit} booked
+                                      </span>
+
+                                      <span
+                                        style={{
+                                          fontSize: 12,
+                                          fontWeight: 900,
+                                          padding: "2px 8px",
+                                          borderRadius: 999,
+                                          background: isFull ? "#ffebee" : isPast ? "#eeeeee" : "#e8f5e9",
+                                          color: isFull ? "#c62828" : isPast ? "#616161" : "#2e7d32"
+                                        }}
+                                      >
+                                        {isFull ? "FULL" : isPast ? "CLOSED" : "AVAILABLE"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </label>
+                              </Paper>
+                            );
+                          })}
+                      </Stack>
+                    </Box>
+
+                    {/* STICKY FOOTER */}
+                    <Box
+                      sx={{
+                        p: 2,
+                        pt: 1.5,
+                        borderTop: "1px solid rgba(0,0,0,0.08)",
+                        backgroundColor: "background.paper"
+                      }}
+                    >
                       <Button
-  variant={p.active === false ? "contained" : "outlined"}
-  color={p.active === false ? "success" : "warning"}
-  onClick={() => toggleProductActive(p)}
-  disabled={!isAdminRole}
-  sx={{ fontWeight: 900 }}
->
-  {p.active === false ? "Back in stock" : "Out of stock"}
-</Button>
+                        fullWidth
+                        variant="contained"
+                        sx={{ borderRadius: 2, py: 1.2, fontWeight: 900 }}
+                        disabled={!canPlaceOrder}
+                        onClick={async () => {
+                          await placeOrder();
+                          setCartOpen(false);
+                        } }
+                      >
+                        Pay & Place order
+                      </Button>
 
-<Paper sx={{ p: isTablet ? 2.5 : 1.5, borderRadius: 3 }}></Paper>
-                      {isAdminRole && (
-                        <Button variant="outlined" onClick={() => openEditConfig(p)}>
-                          Edit config
+                      {cart.length === 0 && (
+                        <Button
+                          fullWidth
+                          variant="outlined"
+                          sx={{ mt: 1, borderRadius: 2, py: 1.1, fontWeight: 900 }}
+                          onClick={() => setCartOpen(false)}
+                        >
+                          Close
                         </Button>
                       )}
 
-                      <Button
-                        variant="outlined"
-                        color="error"
-                        onClick={() => removeProduct(p)}
-                        disabled={!isAdminRole}
-                      >
-                        Delete
-                      </Button>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              ))}
-            </Box>
-          )}
+                      {!canPlaceOrder && (
+                        <Typography sx={{ mt: 1, opacity: 0.75 }}>
+                          Add items and choose a pickup time.
+                        </Typography>
+                      )}
 
-          {staffTab === "reports" && isAdminRole && (
-  <ReportsPanel orders={ordersAll} />
-)}
-        </Box>
-      )}
-    </Container>
+                      {publicOrder && (() => {
+                        const st = normalizeStatus(publicOrder.status);
+
+                        return (
+                          <Paper
+                            variant="outlined"
+                            sx={{
+                              mt: 1.5,
+                              p: 1.25,
+                              borderRadius: 2,
+                              borderWidth: st === STATUS.READY ? 2 : 1,
+                              opacity: 0.95,
+                              background: st === STATUS.READY
+                                ? "#e8f5e9"
+                                : st === STATUS.IN_PROGRESS
+                                  ? "#fff8e1"
+                                  : "#e3f2fd"
+                            }}
+                          >
+                            <Stack direction="row" alignItems="center" justifyContent="space-between">
+                              <Typography sx={{ fontWeight: 900 }}>
+                                Status: {st}
+                              </Typography>
+
+                              <Chip
+                                label={st}
+                                color={chipColor(st)}
+                                icon={chipIcon(st)}
+                                size="small" />
+                            </Stack>
+
+                            {st === STATUS.READY && (
+                              <Typography sx={{ mt: 0.5, fontWeight: 800 }}>
+                                ✅ Ready for pickup!
+                              </Typography>
+                            )}
+                          </Paper>
+                        );
+                      })()}
+                    </Box>
+                  </Box>
+                </Drawer>
+              </Grid>
+            )}
+
+            {/* STAFF UI */}
+            {isStaff && staffAllowed && (
+              <Box>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2, flexWrap: "wrap" }}>
+                  <Tabs value={staffTab} onChange={(_, v) => setStaffTab(v)}>
+                    <Tab label="Orders" value="orders" />
+                    {isAdminRole && <Tab label="Products" value="products" />}
+                    {isAdminRole && <Tab label="Reports" value="reports" />} {/* 🔥 ASTA ADAUGI */}
+                  </Tabs>
+
+
+
+                  {staffTab === "orders" && (
+                    <FormControlLabel
+                      sx={{ ml: "auto" }}
+                      control={<Checkbox
+                        checked={showOnlyOpen}
+                        onChange={(e) => setShowOnlyOpen(e.target.checked)} />}
+                      label="Only open orders" />
+                  )}
+                </Stack>
+
+                <Divider sx={{ mb: 2 }} />
+
+                {staffTab === "orders" && (
+                  <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
+                      Orders (live)
+                    </Typography>
+
+                    {staffOrders.length === 0 && (
+                      <Typography sx={{ opacity: 0.7 }}>No orders yet.</Typography>
+                    )}
+
+                    {staffOrders.map((order) => (
+                      <Card
+                        key={order.id}
+                        sx={{
+                          mb: 2,
+                          borderRadius: 3,
+                          p: isTablet ? 1 : 0,
+                          backgroundColor: lateWarningIds.includes(order.id)
+                            ? "#ffebee"
+                            : order.id === highlightedOrderId
+                              ? "#e8f5e9"
+                              : "background.paper",
+                          border: lateWarningIds.includes(order.id)
+                            ? "2px solid #d32f2f"
+                            : "1px solid rgba(0,0,0,0.12)",
+                          transition: "background-color 0.5s ease, border 0.3s ease",
+                          animation: lateWarningIds.includes(order.id)
+                            ? "latePulse 1.5s infinite"
+                            : "none",
+
+                          "@keyframes latePulse": {
+                            "0%": { boxShadow: "0 0 0 0 rgba(211,47,47,0.6)" },
+                            "70%": { boxShadow: "0 0 0 10px rgba(211,47,47,0)" },
+                            "100%": { boxShadow: "0 0 0 0 rgba(211,47,47,0)" }
+                          }
+                        }}
+                      >
+                        <CardContent sx={{ p: isTablet ? 2.5 : 2 }}>
+                          <Stack
+                            direction="row"
+                            spacing={2}
+                            alignItems="flex-start"
+                            justifyContent="space-between"
+                            flexWrap="wrap"
+                          >
+                            {/* LEFT: date + slot */}
+                            <Box sx={{ minWidth: 220 }}>
+                              <Typography sx={{ fontWeight: 900, fontSize: 18 * STAFF_FONT_SCALE, lineHeight: 1.1 }}>
+                                {formatPickupDateShort(order.pickupDate)}
+                              </Typography>
+
+                              <Typography sx={{ fontWeight: 900, fontSize: 20 * STAFF_FONT_SCALE, lineHeight: 1.1 }}>
+                                {order.pickupTime}
+                              </Typography>
+                            </Box>
+
+                            {/* CENTER: status chip */}
+                            <Chip
+                              icon={chipIcon(order.status)}
+                              label={order.status}
+                              color={chipColor(order.status)}
+                              variant="filled"
+                              sx={{
+                                fontWeight: 900,
+                                fontSize: 14 * STAFF_FONT_SCALE,
+                                px: 1.2,
+                                py: 2.2,
+                                borderRadius: 999
+                              }} />
+
+                            {/* RIGHT: order code BIG */}
+                            <Box sx={{ textAlign: "right" }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 1000,
+                                  letterSpacing: 3,
+                                  fontSize: 26 * STAFF_FONT_SCALE,
+                                  lineHeight: 1
+                                }}
+                              >
+                                {order.code}
+                              </Typography>
+                              <Typography sx={{ opacity: 0.7, fontSize: 12 * STAFF_FONT_SCALE }}>
+                                Order Code
+                              </Typography>
+                            </Box>
+                          </Stack>
+
+                          <Chip
+                            label={`Total: ${formatEUR(order.total)}`}
+                            sx={{
+                              mt: 1.2,
+                              fontWeight: 1000,
+                              fontSize: 14 * STAFF_FONT_SCALE,
+                              px: 1.2,
+                              py: 2,
+                              borderRadius: 999
+                            }} />
+
+                          <Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
+                          {(order.items || []).map((it, idx) => (
+                            <Typography
+                              key={idx}
+                              sx={{ fontSize: 14 * STAFF_FONT_SCALE, fontWeight: 800, lineHeight: 1.35 }}
+                            >
+                              - {it.displayName || it.name} ({formatEUR(it.price)})
+                            </Typography>
+                          ))}
+
+                          <Box
+                            sx={{
+                              position: "sticky",
+                              top: 64,
+                              zIndex: 10,
+                              bgcolor: "background.paper",
+                              pb: 1,
+                              mb: 2
+                            }}
+                          >
+                            <Stack direction="row" spacing={1} sx={{ overflowX: "auto" }}>
+
+                              <Button
+                                variant="outlined"
+                                sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
+                                onClick={() => setStatus(order.id, order.code, STATUS.NEW)}
+                              >
+                                New
+                              </Button>
+
+                              <Button
+                                variant="outlined"
+                                sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
+                                onClick={() => setStatus(order.id, order.code, STATUS.IN_PROGRESS)}
+                              >
+                                In progress
+                              </Button>
+
+                              <Button
+                                variant="contained"
+                                sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
+                                onClick={() => {
+                                  if (!window.confirm("Mark this order as READY for pickup?")) return;
+                                  setStatus(order.id, order.code, STATUS.READY);
+                                } }
+                              >
+                                Ready
+                              </Button>
+                            </Stack>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Box>
+                )}
+
+                {staffTab === "products" && isAdminRole && (
+                  <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
+                      Products (Admin)
+                    </Typography>
+
+                    <Card sx={{ borderRadius: 3, mb: 2 }}>
+                      <CardContent>
+                        <Typography sx={{ fontWeight: 800, mb: 1 }}>Add product</Typography>
+
+                        <Box
+                          component="form"
+                          onSubmit={addProduct}
+                          sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}
+                        >
+                          <TextField
+                            label="Name"
+                            value={newName}
+                            onChange={(e) => setNewName(e.target.value)}
+                            size="small" />
+                          <TextField
+                            select
+                            label="Category"
+                            value={newCategory}
+                            onChange={(e) => setNewCategory(e.target.value)}
+                            size="small"
+                            sx={{ width: 160 }}
+                          >
+                            <MenuItem value="rolls">ROLLS</MenuItem>
+                            <MenuItem value="sides">SIDES</MenuItem>
+                            <MenuItem value="drinks">DRINKS</MenuItem>
+                          </TextField>
+                          <TextField
+                            label="Price"
+                            value={newPrice}
+                            onChange={(e) => setNewPrice(e.target.value)}
+                            size="small"
+                            sx={{ width: 140 }} />
+                          <Button type="submit" variant="contained">
+                            Add
+                          </Button>
+                        </Box>
+                      </CardContent>
+                    </Card>
+
+                    {productsDb.length === 0 && (
+                      <Typography sx={{ opacity: 0.7 }}>No products yet.</Typography>
+                    )}
+
+                    {productsDb.map((p) => (
+                      <Card key={p.id} sx={{ mb: 2, borderRadius: 3 }}>
+                        <CardContent>
+                          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                            <Typography sx={{ fontWeight: 800 }}>{p.name}</Typography>
+                            <Chip
+                              size="small"
+                              label={p.active === false ? "Out of stock" : "Available"}
+                              color={p.active === false ? "default" : "success"}
+                              variant={p.active === false ? "outlined" : "filled"} />
+                          </Stack>
+
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }} flexWrap="wrap">
+                            <Typography variant="body2">Price:</Typography>
+                            <TextField
+                              defaultValue={p.price}
+                              size="small"
+                              sx={{ width: 140 }}
+                              onBlur={(e) => updateProductPrice(p, e.target.value)}
+                              disabled={!isAdminRole} />
+                            <TextField
+                              select
+                              label="Category"
+                              size="small"
+                              value={getCategory(p)}
+                              sx={{ width: 160 }}
+                              onChange={(e) => updateProductCategory(p, e.target.value)}
+                              disabled={!isAdminRole}
+                            >
+                              <MenuItem value="rolls">ROLLS</MenuItem>
+                              <MenuItem value="sides">SIDES</MenuItem>
+                              <MenuItem value="drinks">DRINKS</MenuItem>
+                            </TextField>
+                            <Button
+                              variant={p.active === false ? "contained" : "outlined"}
+                              color={p.active === false ? "success" : "warning"}
+                              onClick={() => toggleProductActive(p)}
+                              disabled={!isAdminRole}
+                              sx={{ fontWeight: 900 }}
+                            >
+                              {p.active === false ? "Back in stock" : "Out of stock"}
+                            </Button>
+
+                            <Paper sx={{ p: isTablet ? 2.5 : 1.5, borderRadius: 3 }}></Paper>
+                            {isAdminRole && (
+                              <Button variant="outlined" onClick={() => openEditConfig(p)}>
+                                Edit config
+                              </Button>
+                            )}
+
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              onClick={() => removeProduct(p)}
+                              disabled={!isAdminRole}
+                            >
+                              Delete
+                            </Button>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Box>
+                )}
+
+                {staffTab === "reports" && isAdminRole && (
+                  <ReportsPanel orders={ordersAll} />
+                )}
+              </Box>
+            )}
+          </Container>
+       
+
+    
 
     {/* EDIT CONFIG DIALOG */}
     <Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="sm">
@@ -2830,6 +2825,8 @@ backgroundColor: isFull ? "#fff5f5" : "transparent",
     </Button>
   </DialogActions>
 </Dialog>
+ </>
+)}
 </>
 );
 }
