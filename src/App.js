@@ -136,7 +136,7 @@ Total: €${Number(order.total || 0).toFixed(2)}
 `;
 
   const encoded = encodeURIComponent(text);
-  window.location.href = `rawbt:text,${encoded}`;
+  window.open(`rawbt:text,${encoded}`);
 }
 
 function makePickupSlots(now, bufferMin, slotSizeMin, windowHours, limitPerSlot) {
