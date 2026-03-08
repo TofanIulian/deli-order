@@ -115,9 +115,10 @@ function hasReachedWarningTime(order) {
   return now >= warnFrom;
 }
 
-function printOrder(order) {
+async function printOrder(order) {
+
   const itemsText = (order.items || [])
-    .map((it) => `- ${it.displayName || it.name}  €${Number(it.price || 0).toFixed(2)}`)
+    .map(i => `- ${i.name}  €${Number(i.price).toFixed(2)}`)
     .join("\n");
 
   const text =
@@ -126,17 +127,28 @@ function printOrder(order) {
 Order: ${order.code}
 Pickup: ${order.pickupDate} ${order.pickupTime}
 
-Items:
 ${itemsText}
 
 ----------------------------
-Total: €${Number(order.total || 0).toFixed(2)}
+Total: €${Number(order.total).toFixed(2)}
 
+\n\n`;
 
-`;
+  try {
 
-  const encoded = encodeURIComponent(text);
-  window.open(`rawbt:text,${encoded}`);
+    await fetch("http://localhost:40213/print", {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain"
+      },
+      body: text
+    });
+
+    console.log("PRINT SENT");
+
+  } catch (err) {
+    console.error("PRINT ERROR", err);
+  }
 }
 
 function makePickupSlots(now, bufferMin, slotSizeMin, windowHours, limitPerSlot) {
