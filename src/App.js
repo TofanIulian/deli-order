@@ -921,19 +921,17 @@ useEffect(() => {
     } else {
       const addedChanges = snap.docChanges().filter((c) => c.type === "added");
 
-      if (addedChanges.length > 0) {
-        const addedOrder = addedChanges[0].doc.data();
-        const newId = addedChanges[0].doc.id;
+if (addedChanges.length > 0) {
+  const newId = addedChanges[0].doc.id;
 
-        playNewOrderSound();
-        printOrderBrowser(addedOrder);
+  playNewOrderSound();
 
-        setHighlightedOrderId(newId);
+  setHighlightedOrderId(newId);
 
-        setTimeout(() => {
-          setHighlightedOrderId(null);
-        }, 10000);
-      }
+  setTimeout(() => {
+    setHighlightedOrderId(null);
+  }, 10000);
+}
     }
 
     // ✅ actualizează orders pentru UI
@@ -1340,54 +1338,76 @@ useEffect(() => {
   };
 }, [isStaff]);
 
-
+function formatLine(left, right, width = 32) {
+  const l = left ?? "";
+  const r = right ?? "";
+  const spaces = Math.max(width - l.length - r.length, 1);
+  return l + " ".repeat(spaces) + r;
+}
 
 
 return (
   <>
    {printMode && printOrderData ? (
   <Box sx={{ p: 2, bgcolor: "#fff", color: "#000", minHeight: "100vh" }}>
-    <Box sx={{ maxWidth: 320, mx: "auto", fontFamily: "Arial, sans-serif" }}>
-      <Typography align="center" sx={{ fontWeight: 900, fontSize: 22 }}>
-        Wrights Food Fayre
-      </Typography>
+    <Box sx={{ maxWidth: 320, mx: "auto", fontFamily: "monospace" }}>
+      <Box sx={{ display: "flex", justifyContent: "center", mb: 1 }}>
+  <img
+    src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://deli-order.vercel.app"
+    alt="QR Order"
+    style={{ width: 90, height: 90 }}
+  />
+</Box>
+      <Typography align="center" sx={{ fontWeight: 900, fontSize: 20 }}>
+  WRIGHTS FOOD FAYRE
+</Typography>
 
-      <Typography align="center" sx={{ mb: 1 }}>
-        Kitchen Ticket
-      </Typography>
-
-      <Divider sx={{ my: 1, borderColor: "#000" }} />
-
-      <Typography sx={{ fontWeight: 900 }}>
-        Order: {printOrderData.code}
-      </Typography>
-
-      <Typography>
-        Pickup: {printOrderData.pickupDate} {printOrderData.pickupTime}
-      </Typography>
+      <Typography align="center" sx={{ mb: 1, fontSize: 14 }}>
+  Order Receipt
+</Typography>
 
       <Divider sx={{ my: 1, borderColor: "#000" }} />
+
+      <Typography align="center" sx={{ fontSize: 36, fontWeight: 900 }}>
+  {printOrderData.code}
+</Typography>
+
+      <Typography align="center">
+  Pickup: {new Date(printOrderData.pickupDate).toLocaleDateString("en-IE")} {printOrderData.pickupTime}
+</Typography>
+
+      <Typography align="center">
+  ------------------------------
+</Typography>
 
       <Typography sx={{ fontWeight: 900, mb: 1 }}>Items</Typography>
 
-      {(printOrderData.items || []).map((it, idx) => (
-        <Box
-          key={idx}
-          sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}
-        >
-          <Typography>{it.displayName || it.name}</Typography>
-          <Typography>€{Number(it.price || 0).toFixed(2)}</Typography>
-        </Box>
-      ))}
+      {(printOrderData.items || []).map((it, idx) => {
+  const name = it.displayName || it.name;
+  const price = `€${Number(it.price || 0).toFixed(2)}`;
+
+  return (
+    <Typography key={idx}>
+      {formatLine(name, price)}
+    </Typography>
+  );
+})}
 
       <Divider sx={{ my: 1, borderColor: "#000" }} />
 
-      <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-        <Typography sx={{ fontWeight: 900 }}>Total</Typography>
-        <Typography sx={{ fontWeight: 900 }}>
-          €{Number(printOrderData.total || 0).toFixed(2)}
-        </Typography>
-      </Box>
+      <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
+  <Typography sx={{ fontWeight: 900 }}>
+  {formatLine("TOTAL", `€${Number(printOrderData.total || 0).toFixed(2)}`)}
+</Typography>
+  <Typography sx={{ fontWeight: 900, fontSize: 18 }}>
+    €{Number(printOrderData.total || 0).toFixed(2)}
+  </Typography>
+</Box>
+<Box sx={{ textAlign: "center", mt: 2 }}>
+  <Typography sx={{ fontSize: 14 }}>
+    Thank you!
+  </Typography>
+</Box>
     </Box>
   </Box>
 ) : (
@@ -2231,15 +2251,17 @@ return (
                               </Button>
 
                               <Button
-                                variant="contained"
-                                sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-                                onClick={() => {
-                                  if (!window.confirm("Mark this order as READY for pickup?")) return;
-                                  setStatus(order.id, order.code, STATUS.READY);
-                                } }
-                              >
-                                Ready
-                              </Button>
+  variant="contained"
+  sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
+  onClick={() => {
+    if (!window.confirm("Print final receipt and mark this order as READY?")) return;
+
+    printOrderBrowser(order);
+    setStatus(order.id, order.code, STATUS.READY);
+  }}
+>
+  Ready
+</Button>
                             </Stack>
                           </Box>
                         </CardContent>
