@@ -246,10 +246,7 @@ const warnedLateOrdersRef = useRef(new Set());
 const [printMode, setPrintMode] = useState(false);
 const [printOrderData, setPrintOrderData] = useState(null);
 
-function printOrderBrowser(order) {
-  setPrintOrderData(order);
-  setPrintMode(true);
-}
+
 
 const STAFF_FONT_SCALE = isTablet ? 1.35 : 1; // ajustează 1.25 / 1.4 după gust
 useEffect(() => {
