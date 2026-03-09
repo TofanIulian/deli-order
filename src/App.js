@@ -1348,6 +1348,8 @@ function formatLine(left, right, width = 32) {
 async function shareReceiptText(order) {
   const text = buildReceiptText(order);
 
+  console.log("navigator.share =", typeof navigator.share);
+
   try {
     if (navigator.share) {
       await navigator.share({
@@ -1357,9 +1359,11 @@ async function shareReceiptText(order) {
       return true;
     }
 
+    alert("navigator.share is NOT available on this device/browser");
     return false;
   } catch (err) {
     console.error("SHARE RECEIPT ERROR", err);
+    alert(`Share error: ${err.message || err}`);
     return false;
   }
 }
