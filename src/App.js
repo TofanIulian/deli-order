@@ -1458,9 +1458,12 @@ return (
   <Button
     color="inherit"
     onClick={() => {
-  const test = encodeURIComponent("TEST PRINT\n\nWrights Food Fayre\n\n");
+  const test = encodeURIComponent(
+    "TEST PRINT\n\nWRIGHTS FOOD FAYRE\n\nHELLO\n"
+  );
+
   if (window.fully) {
-    window.fully.loadUrl(`rawbt:text,${test}`);
+    window.fully.loadUrl(`rawbt:${test}`);
   } else {
     alert("Fully interface not available");
   }
@@ -2272,17 +2275,21 @@ return (
     onClick={() => {
   if (!window.confirm("Mark this order as READY and print receipt?")) return;
 
-  const receipt = buildReceiptText(order);
+  const receipt = buildReceiptText(order)
+    .replaceAll("€", "EUR "); // temporar, ca să evităm probleme de encoding
+
   const encoded = encodeURIComponent(receipt);
 
   try {
     if (window.fully) {
-      window.fully.loadUrl(`rawbt:text,${encoded}`);
+      window.fully.loadUrl(`rawbt:${encoded}`);
     } else {
       alert("Fully interface not available");
+      return;
     }
   } catch (err) {
     console.error("RAWBT ERROR", err);
+    return;
   }
 
   setStatus(order.id, order.code, STATUS.READY);
