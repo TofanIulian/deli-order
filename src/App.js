@@ -1345,6 +1345,29 @@ function formatLine(left, right, width = 32) {
   return l + " ".repeat(spaces) + r;
 }
 
+function buildReceiptText(order) {
+  const lines = [];
+
+  lines.push("WRIGHTS FOOD FAYRE");
+  lines.push("");
+  lines.push(order.code);
+  lines.push("");
+  lines.push(`Pickup: ${order.pickupDate} ${order.pickupTime}`);
+  lines.push("--------------------------------");
+
+  (order.items || []).forEach((it) => {
+    const name = it.displayName || it.name || "";
+    const price = `€${Number(it.price || 0).toFixed(2)}`;
+    lines.push(formatLine(name, price, 32));
+  });
+
+  lines.push("--------------------------------");
+  lines.push(formatLine("TOTAL", `€${Number(order.total || 0).toFixed(2)}`, 32));
+  lines.push("");
+  lines.push("Thank you!");
+
+  return lines.join("\n");
+}
 
 return (
   <>
@@ -1388,48 +1411,18 @@ return (
     boxSizing: "border-box"
   }}
 >
-        <Typography align="center" sx={{ fontWeight: 900, fontSize: 20 }}>
-          WRIGHTS FOOD FAYRE
-        </Typography>
-
-        <Typography
-          align="center"
-          sx={{ fontSize: 32, fontWeight: 900, letterSpacing: 2 }}
-        >
-          {printOrderData.code}
-        </Typography>
-
-        <Typography align="center">
-          Pickup: {printOrderData.pickupDate} {printOrderData.pickupTime}
-        </Typography>
-
-        <Typography align="center">
-          ------------------------------
-        </Typography>
-
-        {(printOrderData.items || []).map((it, idx) => {
-          const name = it.displayName || it.name;
-          const price = `€${Number(it.price || 0).toFixed(2)}`;
-
-          return (
-            <Typography key={idx}>
-              {formatLine(name, price)}
-            </Typography>
-          );
-        })}
-
-        <Typography align="center">
-          ------------------------------
-        </Typography>
-
-        <Typography sx={{ fontWeight: 900 }}>
-          {formatLine("TOTAL", `€${Number(printOrderData.total || 0).toFixed(2)}`)}
-        </Typography>
-
-        <Box sx={{ textAlign: "center", mt: 2 }}>
-          <Typography>Thank you!</Typography>
-        </Box>
-      
+        <pre
+  style={{
+    margin: 0,
+    whiteSpace: "pre-wrap",
+    fontFamily: "monospace",
+    fontSize: "18px",
+    lineHeight: 1.35,
+    textAlign: "left"
+  }}
+>
+  {buildReceiptText(printOrderData)}
+</pre>
     </Box>
   )}
 
