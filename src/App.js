@@ -1342,28 +1342,9 @@ function formatLine(left, right, width = 32) {
   return l + " ".repeat(spaces) + r;
 }
 
-async function shareReceiptText(order) {
-  const text = buildReceiptText(order);
 
-  console.log("navigator.share =", typeof navigator.share);
 
-  try {
-    if (navigator.share) {
-      await navigator.share({
-        title: `Order ${order.code}`,
-        text
-      });
-      return true;
-    }
-
-    alert("navigator.share is NOT available on this device/browser");
-    return false;
-  } catch (err) {
-    console.error("SHARE RECEIPT ERROR", err);
-    alert(`Share error: ${err.message || err}`);
-    return false;
-  }
-}
+ 
 
 function buildReceiptText(order) {
   const lines = [];
@@ -2287,17 +2268,19 @@ return (
   variant="contained"
   sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
   
-    onClick={async () => {
-  if (!window.confirm("Share final receipt and mark this order as READY?")) return;
+    onClick={() => {
+  if (!window.confirm("Mark this order as READY and print receipt?")) return;
 
-  const shared = await shareReceiptText(order);
+  const receipt = buildReceiptText(order);
 
-  if (!shared) {
-    alert("Could not open share sheet.");
-    return;
+  if (window.fully) {
+    const encoded = encodeURIComponent(receipt);
+    const url = `rawbt:print?text=${encoded}`;
+    window.fully.loadUrl(url);
   }
-    setStatus(order.id, order.code, STATUS.READY);
-  }}
+
+  setStatus(order.id, order.code, STATUS.READY);
+}}
 >
   Ready
 </Button>
