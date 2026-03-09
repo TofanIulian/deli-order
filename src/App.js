@@ -1477,22 +1477,19 @@ return (
             )}
 
             {isStaff && staffAllowed && (
-              <Button
-                color="inherit"
-                onClick={() => printOrderBrowser({
-                  code: "TEST01",
-                  pickupDate: "2026-03-08",
-                  pickupTime: "12:15 - 12:30",
-                  items: [
-                    { name: "Breakfast Roll", price: 5 },
-                    { name: "Coffee", price: 2.5 }
-                  ],
-                  total: 7.5
-                })}
-              >
-                Test Print
-              </Button>
-            )}
+  <Button
+    color="inherit"
+    onClick={() => {
+      if (window.fully) {
+        window.fully.startApplication("ru.a402d.rawbtprinter");
+      } else {
+        alert("Fully interface not available");
+      }
+    }}
+  >
+    Test Print
+  </Button>
+)}
 
           </Toolbar>
         </AppBar><Container maxWidth="lg" sx={{ py: 3 }}>
