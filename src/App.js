@@ -1458,12 +1458,13 @@ return (
   <Button
     color="inherit"
     onClick={() => {
-      if (window.fully) {
-        window.fully.startApplication("ru.a402d.rawbtprinter");
-      } else {
-        alert("Fully interface not available");
-      }
-    }}
+  const test = encodeURIComponent("TEST PRINT\n\nWrights Food Fayre\n\n");
+  if (window.fully) {
+    window.fully.loadUrl(`rawbt:text,${test}`);
+  } else {
+    alert("Fully interface not available");
+  }
+}}
   >
     Test Print
   </Button>
@@ -2272,11 +2273,16 @@ return (
   if (!window.confirm("Mark this order as READY and print receipt?")) return;
 
   const receipt = buildReceiptText(order);
+  const encoded = encodeURIComponent(receipt);
 
-  if (window.fully) {
-    const encoded = encodeURIComponent(receipt);
-    const url = `rawbt:print?text=${encoded}`;
-    window.fully.loadUrl(url);
+  try {
+    if (window.fully) {
+      window.fully.loadUrl(`rawbt:text,${encoded}`);
+    } else {
+      alert("Fully interface not available");
+    }
+  } catch (err) {
+    console.error("RAWBT ERROR", err);
   }
 
   setStatus(order.id, order.code, STATUS.READY);
