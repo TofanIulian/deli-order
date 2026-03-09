@@ -246,7 +246,10 @@ const warnedLateOrdersRef = useRef(new Set());
 const [printMode, setPrintMode] = useState(false);
 const [printOrderData, setPrintOrderData] = useState(null);
 
-
+function printOrderBrowser(order) {
+  setPrintOrderData(order);
+  setPrintMode(true);
+}
 
 const STAFF_FONT_SCALE = isTablet ? 1.35 : 1; // ajustează 1.25 / 1.4 după gust
 useEffect(() => {
@@ -1342,10 +1345,6 @@ function formatLine(left, right, width = 32) {
   return l + " ".repeat(spaces) + r;
 }
 
-
-
- 
-
 function buildReceiptText(order) {
   const lines = [];
 
@@ -1455,23 +1454,22 @@ return (
             )}
 
             {isStaff && staffAllowed && (
-  <Button
-    color="inherit"
-    onClick={() => {
-  const test = encodeURIComponent(
-    "TEST PRINT\n\nWRIGHTS FOOD FAYRE\n\nHELLO\n"
-  );
-
-  if (window.fully) {
-    window.fully.loadUrl(`rawbt:${test}`);
-  } else {
-    alert("Fully interface not available");
-  }
-}}
-  >
-    Test Print
-  </Button>
-)}
+              <Button
+                color="inherit"
+                onClick={() => printOrderBrowser({
+                  code: "TEST01",
+                  pickupDate: "2026-03-08",
+                  pickupTime: "12:15 - 12:30",
+                  items: [
+                    { name: "Breakfast Roll", price: 5 },
+                    { name: "Coffee", price: 2.5 }
+                  ],
+                  total: 7.5
+                })}
+              >
+                Test Print
+              </Button>
+            )}
 
           </Toolbar>
         </AppBar><Container maxWidth="lg" sx={{ py: 3 }}>
@@ -2271,29 +2269,12 @@ return (
                               <Button
   variant="contained"
   sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-  
-    onClick={() => {
-  if (!window.confirm("Mark this order as READY and print receipt?")) return;
+  onClick={() => {
+    if (!window.confirm("Print final receipt and mark this order as READY?")) return;
 
-  const receipt = buildReceiptText(order)
-    .replaceAll("€", "EUR "); // temporar, ca să evităm probleme de encoding
-
-  const encoded = encodeURIComponent(receipt);
-
-  try {
-    if (window.fully) {
-      window.fully.loadUrl(`rawbt:${encoded}`);
-    } else {
-      alert("Fully interface not available");
-      return;
-    }
-  } catch (err) {
-    console.error("RAWBT ERROR", err);
-    return;
-  }
-
-  setStatus(order.id, order.code, STATUS.READY);
-}}
+    printOrderBrowser(order);
+    setStatus(order.id, order.code, STATUS.READY);
+  }}
 >
   Ready
 </Button>
