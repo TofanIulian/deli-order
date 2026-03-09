@@ -1345,6 +1345,25 @@ function formatLine(left, right, width = 32) {
   return l + " ".repeat(spaces) + r;
 }
 
+async function shareReceiptText(order) {
+  const text = buildReceiptText(order);
+
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: `Order ${order.code}`,
+        text
+      });
+      return true;
+    }
+
+    return false;
+  } catch (err) {
+    console.error("SHARE RECEIPT ERROR", err);
+    return false;
+  }
+}
+
 function buildReceiptText(order) {
   const lines = [];
 
@@ -2269,10 +2288,16 @@ return (
                               <Button
   variant="contained"
   sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-  onClick={() => {
-    if (!window.confirm("Print final receipt and mark this order as READY?")) return;
+  
+    onClick={async () => {
+  if (!window.confirm("Share final receipt and mark this order as READY?")) return;
 
-    printOrderBrowser(order);
+  const shared = await shareReceiptText(order);
+
+  if (!shared) {
+    alert("Could not open share sheet.");
+    return;
+  }
     setStatus(order.id, order.code, STATUS.READY);
   }}
 >
