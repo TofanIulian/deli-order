@@ -1380,9 +1380,9 @@ return (
 
       .print-ticket {
         display: block !important;
-        width: 72mm !important;
+        width: 80mm !important;
         margin: 0 auto !important;
-        padding: 4mm !important;
+        padding: 2mm !important;
         box-sizing: border-box !important;
         background: white !important;
         color: black !important;
@@ -1402,9 +1402,9 @@ return (
   <Box
   className="print-ticket"
   sx={{
-    width: "72mm",
+    width: "80mm",
     margin: "0 auto",
-    padding: "4mm",
+    padding: "2mm",
     background: "#fff",
     color: "#000",
     fontFamily: "monospace",
@@ -1413,12 +1413,12 @@ return (
 >
         <pre
   style={{
-    margin: 0,
-    whiteSpace: "pre-wrap",
-    fontFamily: "monospace",
-    fontSize: "18px",
-    lineHeight: 1.35,
-    textAlign: "left"
+        margin: 0,
+        whiteSpace: "pre-wrap",
+        fontFamily: "monospace",
+        fontSize: "24px",
+        lineHeight: 1.2,
+        textAlign: "left"
   }}
 >
   {buildReceiptText(printOrderData)}
