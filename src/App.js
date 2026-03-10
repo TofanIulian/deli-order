@@ -871,7 +871,11 @@ useEffect(() => {
 
   const t = setTimeout(() => {
     try {
-      window.print();
+      if (window.fully) {
+        window.fully.print();
+      } else {
+        window.print();
+      }
     } finally {
       setTimeout(() => {
         setPrintMode(false);
