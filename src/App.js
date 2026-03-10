@@ -867,24 +867,23 @@ return hh * 60 + mm;
 }
 
 useEffect(() => {
-if (!printMode || !printOrderData) return;
+  if (!printMode || !printOrderData) return;
 
-const t = setTimeout(() => {
-window.print();
-}, 500);
+  const t = setTimeout(() => {
+    try {
+      window.print();
+    } finally {
+      setTimeout(() => {
+        setPrintMode(false);
+        setPrintOrderData(null);
+      }, 1500);
+    }
+  }, 500);
 
-return () => clearTimeout(t);
+  return () => clearTimeout(t);
 }, [printMode, printOrderData]);
 
-useEffect(() => {
-const handleAfterPrint = () => {
-setPrintMode(false);
-setPrintOrderData(null);
-};
 
-window.addEventListener("afterprint", handleAfterPrint);
-return () => window.removeEventListener("afterprint", handleAfterPrint);
-}, []);
 
 function isSlotWithinWorkingHours(label) {
 const startMin = slotStartMinutes(label);
@@ -1345,116 +1344,85 @@ const spaces = Math.max(width - l.length - r.length, 1);
 return l + " ".repeat(spaces) + r;
 }
 
+function buildReceiptText(order) {
+  let out = "";
 
-return (
-<>
-<style>
-{`
-@media print {
+  out += "WRIGHTS FOOD FAYRE\n\n";
+  out += order.code + "\n\n";
+  out += `Pickup: ${order.pickupDate} ${order.pickupTime}\n`;
+  out += "------------------------------\n";
 
-  body * {
-    visibility: hidden;
-  }
+  (order.items || []).forEach(it => {
+    const name = it.displayName || it.name;
+    const price = `€${Number(it.price || 0).toFixed(2)}`;
+    out += formatLine(name, price) + "\n";
+  });
 
-  .print-ticket,
-  .print-ticket * {
-    visibility: visible;
-  }
+  out += "------------------------------\n";
+  out += formatLine("TOTAL", `€${Number(order.total || 0).toFixed(2)}`) + "\n\n";
+  out += "Thank you!\n";
 
-  .print-ticket {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 72mm;
-    margin: 0;
-    padding: 4mm;
-    box-sizing: border-box;
-    font-family: monospace;
-    background: white;
-    color: black;
-  }
-
-  .app-screen {
-    display: none !important;
-  }
-
-  body {
-    margin: 0;
-    padding: 0;
-    background: white;
-  }
+  return out;
 }
-`}
-</style>
-
-{printMode && printOrderData && (
-<Box
-  className="print-ticket"
-  sx={{
-    width: "72mm",
-    margin: "0 auto",
-    padding: "4mm",
-    background: "#fff",
-    color: "#000",
-    fontFamily: "monospace",
-    boxSizing: "border-box"
-  }}
->
-  className="print-ticket"
-  sx={{
-    width: "72mm",
-    margin: "0 auto",
-    padding: "4mm",
-    background: "#fff",
-    color: "#000",
-    fontFamily: "monospace",
-    boxSizing: "border-box"
-  }}
->
-<Typography align="center" sx={{ fontWeight: 900, fontSize: 20 }}>
-WRIGHTS FOOD FAYRE
-</Typography>
-
-<Typography
-align="center"
-sx={{ fontSize: 32, fontWeight: 900, letterSpacing: 2 }}
->
-{printOrderData.code}
-</Typography>
-
-<Typography align="center">
-Pickup: {printOrderData.pickupDate} {printOrderData.pickupTime}
-</Typography>
-
-<Typography align="center">
-------------------------------
-</Typography>
-
-{(printOrderData.items || []).map((it, idx) => {
-const name = it.displayName || it.name;
-const price = `€${Number(it.price || 0).toFixed(2)}`;
 
 return (
-<Typography key={idx}>
-{formatLine(name, price)}
-</Typography>
-);
-})}
+  <>
+    <style>
+      {`
+    @media print {
+      .app-screen {
+        display: none !important;
+      }
 
-<Typography align="center">
-------------------------------
-</Typography>
+      .print-ticket {
+        display: block !important;
+        width: 72mm !important;
+        margin: 0 auto !important;
+        padding: 4mm !important;
+        box-sizing: border-box !important;
+        background: white !important;
+        color: black !important;
+        font-family: monospace !important;
+      }
 
-<Typography sx={{ fontWeight: 900 }}>
-{formatLine("TOTAL", `€${Number(printOrderData.total || 0).toFixed(2)}`)}
-</Typography>
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+      }
+    }
+  `}
+    </style>
 
-<Box sx={{ textAlign: "center", mt: 2 }}>
-<Typography>Thank you!</Typography>
-</Box>
+    {printMode && printOrderData && (
+      <Box
+        className="print-ticket"
+        sx={{
+          width: "72mm",
+          margin: "0 auto",
+          padding: "4mm",
+          background: "#fff",
+          color: "#000",
+          fontFamily: "monospace",
+          boxSizing: "border-box"
+        }}
+      >
+        <pre
+          style={{
+            margin: 0,
+            whiteSpace: "pre-wrap",
+            fontFamily: "monospace",
+            fontSize: "18px",
+            lineHeight: 1.35,
+            textAlign: "left"
+          }}
+        >
+          {buildReceiptText(printOrderData)}
+        </pre>
+      </Box>
+    )}
+  
 
-</Box>
-)}
 
 <Box className="app-screen" sx={{ display: printMode ? "none" : "block" }}>
 
