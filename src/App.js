@@ -2268,23 +2268,11 @@ In progress
 <Button
 variant="contained"
 sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-onClick={async () => {
+onClick={() => {
+if (!window.confirm("Print final receipt and mark this order as READY?")) return;
 
-  // 1️⃣ confirm READY
-  if (!window.confirm("Mark order READY?")) return;
-
-  await setStatus(order.id, order.code, STATUS.READY);
-
-  // mic delay pentru Firebase / React
-  setTimeout(() => {
-
-    // 2️⃣ confirm PRINT
-    if (!window.confirm("Print order receipt?")) return;
-
-    printOrderBrowser(order);
-
-  }, 800);
-
+printOrderBrowser(order);
+setStatus(order.id, order.code, STATUS.READY);
 }}
 >
 Ready
