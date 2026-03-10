@@ -2267,12 +2267,14 @@ In progress
 
 <Button
 variant="contained"
-sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
 onClick={() => {
-if (!window.confirm("Print final receipt and mark this order as READY?")) return;
+  if (!window.confirm("Print final receipt and mark this order as READY?")) return;
 
-printOrderBrowser(order);
-setStatus(order.id, order.code, STATUS.READY);
+  printOrderBrowser(order);
+
+  setTimeout(() => {
+    setStatus(order.id, order.code, STATUS.READY);
+  }, 1200);
 }}
 >
 Ready
