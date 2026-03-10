@@ -2267,10 +2267,19 @@ In progress
 
 <Button
 variant="contained"
+sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
 onClick={() => {
   if (!window.confirm("Print final receipt and mark this order as READY?")) return;
 
-  printOrderBrowser(order);
+  const orderForPrint = {
+    code: order.code,
+    pickupDate: order.pickupDate,
+    pickupTime: order.pickupTime,
+    items: [...(order.items || [])],
+    total: order.total
+  };
+
+  printOrderBrowser(orderForPrint);
 
   setTimeout(() => {
     setStatus(order.id, order.code, STATUS.READY);
