@@ -2269,21 +2269,15 @@ In progress
 variant="contained"
 sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
 onClick={() => {
-  if (!window.confirm("Print final receipt and mark this order as READY?")) return;
+  if (!window.confirm("Mark order READY and print receipt?")) return;
 
-  const orderForPrint = {
-    code: order.code,
-    pickupDate: order.pickupDate,
-    pickupTime: order.pickupTime,
-    items: [...(order.items || [])],
-    total: order.total
-  };
+  // 1️⃣ schimbă statusul
+  setStatus(order.id, order.code, STATUS.READY);
 
-  printOrderBrowser(orderForPrint);
-
+  // 2️⃣ după 1 sec printează
   setTimeout(() => {
-    setStatus(order.id, order.code, STATUS.READY);
-  }, 1200);
+    printOrderBrowser(order);
+  }, 1000);
 }}
 >
 Ready
