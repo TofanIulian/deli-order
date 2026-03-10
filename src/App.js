@@ -1345,24 +1345,27 @@ return l + " ".repeat(spaces) + r;
 }
 
 function buildReceiptText(order) {
-  let out = "";
+  const lines = [];
 
-  out += "WRIGHTS FOOD FAYRE\n\n";
-  out += order.code + "\n\n";
-  out += `Pickup: ${order.pickupDate} ${order.pickupTime}\n`;
-  out += "------------------------------\n";
+  lines.push("WRIGHTS FOOD FAYRE");
+  lines.push("");
+  lines.push(order.code || "");
+  lines.push("");
+  lines.push(`Pickup: ${order.pickupDate || ""} ${order.pickupTime || ""}`);
+  lines.push("--------------------------------");
 
-  (order.items || []).forEach(it => {
-    const name = it.displayName || it.name;
+  (order.items || []).forEach((it) => {
+    const name = it.displayName || it.name || "";
     const price = `€${Number(it.price || 0).toFixed(2)}`;
-    out += formatLine(name, price) + "\n";
+    lines.push(formatLine(name, price, 32));
   });
 
-  out += "------------------------------\n";
-  out += formatLine("TOTAL", `€${Number(order.total || 0).toFixed(2)}`) + "\n\n";
-  out += "Thank you!\n";
+  lines.push("--------------------------------");
+  lines.push(formatLine("TOTAL", `€${Number(order.total || 0).toFixed(2)}`, 32));
+  lines.push("");
+  lines.push("Thank you!");
 
-  return out;
+  return lines.join("\n");
 }
 
 return (
@@ -1431,8 +1434,6 @@ return (
 <Typography variant="h6" sx={{ flexGrow: 1 }}>
 Deli – Quick Order
 </Typography>
-
-
 
 {isStaff && staffAllowed && (
 <Button color="inherit" onClick={staffLogout}>
