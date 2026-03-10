@@ -1474,6 +1474,16 @@ Test Print
 </Button>
 )}
 
+<Button
+  color="inherit"
+  onClick={() => {
+    const txt = encodeURIComponent("HELLO\nTEST RAWBT\n\n\n");
+    window.location.href = `rawbt:text=${txt}`;
+  }}
+>
+RawBT Test
+</Button>
+
 </Toolbar>
 </AppBar><Container maxWidth="lg" sx={{ py: 3 }}>
 {/* STAFF LOGIN */}
