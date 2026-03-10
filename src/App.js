@@ -1372,6 +1372,31 @@ function buildReceiptText(order) {
   return lines.join("\n");
 }
 
+function testRawbtServer() {
+  try {
+    const ws = new WebSocket("ws://192.168.1.101:40213");
+
+    ws.onopen = () => {
+      console.log("RAWBT WS OPEN");
+      ws.send("TEST PRINT\nHELLO FROM SERVER FOR RAWBT\n\n\n");
+      setSnack({ open: true, msg: "RawBT server connected" });
+      setTimeout(() => ws.close(), 500);
+    };
+
+    ws.onerror = (e) => {
+      console.error("RAWBT WS ERROR", e);
+      setSnack({ open: true, msg: "RawBT server connection failed" });
+    };
+
+    ws.onclose = () => {
+      console.log("RAWBT WS CLOSED");
+    };
+  } catch (err) {
+    console.error("RAWBT WS EXCEPTION", err);
+    setSnack({ open: true, msg: "RawBT server exception" });
+  }
+}
+
 return (
   <>
     <style>
@@ -1474,15 +1499,11 @@ Test Print
 </Button>
 )}
 
-<Button
-  color="inherit"
-  onClick={() => {
-    const txt = encodeURIComponent("HELLO\nTEST RAWBT\n\n\n");
-    window.location.href = `rawbt:text=${txt}`;
-  }}
->
-RawBT Test
-</Button>
+{isStaff && staffAllowed && (
+  <Button color="inherit" onClick={testRawbtServer}>
+    RawBT Server Test
+  </Button>
+)}
 
 </Toolbar>
 </AppBar><Container maxWidth="lg" sx={{ py: 3 }}>
