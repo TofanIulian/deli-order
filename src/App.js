@@ -1412,6 +1412,17 @@ function testRawbtServer() {
   }
 }
 
+function testFully() {
+  try {
+    if (window.fully) {
+      window.fully.showToast("Fully API works");
+    } else {
+      alert("Fully API not available");
+    }
+  } catch (e) {
+    alert("Fully error");
+  }
+}
 
 return (
   <>
@@ -1520,6 +1531,10 @@ Test Print
     Server Test
   </Button>
 )}
+
+<Button onClick={testFully}>
+  Fully Test
+</Button>
 
 </Toolbar>
 </AppBar><Container maxWidth="lg" sx={{ py: 3 }}>
