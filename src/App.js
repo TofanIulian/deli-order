@@ -2200,6 +2200,20 @@ label="Only open orders" />
 Orders (live)
 </Typography>
 
+<Button
+  variant="outlined"
+  sx={{ mb: 2 }}
+  onClick={() => {
+    if (window.fully) {
+      window.fully.showToast("Fully API works");
+    } else {
+      alert("Fully API not available");
+    }
+  }}
+>
+  Fully Test
+</Button>
+
 {staffOrders.length === 0 && (
 <Typography sx={{ opacity: 0.7 }}>No orders yet.</Typography>
 )}
