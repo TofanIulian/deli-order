@@ -1397,6 +1397,7 @@ function testRawbtServer() {
   }
 }
 
+
 return (
   <>
     <style>
@@ -1501,7 +1502,7 @@ Test Print
 
 {isStaff && staffAllowed && (
   <Button color="inherit" onClick={testRawbtServer}>
-    RawBT Server Test
+    Server Test
   </Button>
 )}
 
