@@ -1377,31 +1377,23 @@ function testRawbtServer() {
     const ws = new WebSocket("ws://127.0.0.1:40213");
 
     ws.onopen = () => {
-      console.log("RAWBT WS OPEN");
       setSnack({ open: true, msg: "Server connected" });
 
       const payload = {
-        type: "text",
-        text: "TEST SERVER\nHELLO PRINTER\n\n\n"
+        text: "HELLO\nTEST PRINT\n\n\n"
       };
 
       ws.send(JSON.stringify(payload));
 
-      setTimeout(() => {
-        ws.close();
-      }, 500);
+      setTimeout(() => ws.close(), 500);
     };
 
-    ws.onerror = (e) => {
-      console.error("RAWBT WS ERROR", e);
+    ws.onerror = () => {
       setSnack({ open: true, msg: "Server connection failed" });
     };
 
-    ws.onclose = () => {
-      console.log("RAWBT WS CLOSED");
-    };
   } catch (err) {
-    console.error("RAWBT WS EXCEPTION", err);
+    console.error(err);
     setSnack({ open: true, msg: "Server exception" });
   }
 }
