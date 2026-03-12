@@ -1374,18 +1374,20 @@ function buildReceiptText(order) {
 
 function testRawbtServer() {
   try {
-    const ws = new WebSocket("ws://192.168.1.101:40213");
+    const ws = new WebSocket("ws://127.0.0.1:40213");
 
     ws.onopen = () => {
       console.log("RAWBT WS OPEN");
-      ws.send("TEST PRINT\nHELLO FROM SERVER FOR RAWBT\n\n\n");
-      setSnack({ open: true, msg: "RawBT server connected" });
-      setTimeout(() => ws.close(), 500);
+      setSnack({ open: true, msg: "Server connected" });
+
+      setTimeout(() => {
+        ws.close();
+      }, 500);
     };
 
     ws.onerror = (e) => {
       console.error("RAWBT WS ERROR", e);
-      setSnack({ open: true, msg: "RawBT server connection failed" });
+      setSnack({ open: true, msg: "Server connection failed" });
     };
 
     ws.onclose = () => {
@@ -1393,7 +1395,7 @@ function testRawbtServer() {
     };
   } catch (err) {
     console.error("RAWBT WS EXCEPTION", err);
-    setSnack({ open: true, msg: "RawBT server exception" });
+    setSnack({ open: true, msg: "Server exception" });
   }
 }
 
