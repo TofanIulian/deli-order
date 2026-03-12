@@ -1374,26 +1374,30 @@ function buildReceiptText(order) {
 
 function testRawbtServer() {
   try {
-    const ws = new WebSocket("ws://127.0.0.1:40213");
+    const ws = new WebSocket("ws://127.0.0.1:40213/");
+    ws.bufferType = "arraybuffer";
 
     ws.onopen = () => {
       setSnack({ open: true, msg: "Server connected" });
 
-      const payload = {
-        text: "HELLO\nTEST PRINT\n\n\n"
-      };
+      const data = "TEST SERVER\nHELLO PRINTER\n\n\n";
+      ws.send(data);
 
-      ws.send(JSON.stringify(payload));
-
-      setTimeout(() => ws.close(), 500);
+      setTimeout(() => {
+        ws.close(1000, "Work complete");
+      }, 300);
     };
 
-    ws.onerror = () => {
+    ws.onerror = (e) => {
+      console.error("RAWBT WS ERROR", e);
       setSnack({ open: true, msg: "Server connection failed" });
     };
 
+    ws.onclose = () => {
+      console.log("RAWBT WS CLOSED");
+    };
   } catch (err) {
-    console.error(err);
+    console.error("RAWBT WS EXCEPTION", err);
     setSnack({ open: true, msg: "Server exception" });
   }
 }
