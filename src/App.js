@@ -1380,12 +1380,22 @@ function testRawbtServer() {
     ws.onopen = () => {
       setSnack({ open: true, msg: "Server connected" });
 
-      const data = "TEST SERVER\nHELLO PRINTER\n\n\n";
+      const data =
+        "\n\n\n" +
+        "TEST SERVER\n" +
+        "HELLO PRINTER\n" +
+        "1234567890\n" +
+        "------------------------------\n" +
+        "LINE 1\n" +
+        "LINE 2\n" +
+        "LINE 3\n" +
+        "\n\n\n\n\n\n";
+
       ws.send(data);
 
       setTimeout(() => {
-        ws.close(1000, "Work complete");
-      }, 300);
+        ws.close(1000, "done");
+      }, 3000);
     };
 
     ws.onerror = (e) => {
