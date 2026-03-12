@@ -1380,6 +1380,13 @@ function testRawbtServer() {
       console.log("RAWBT WS OPEN");
       setSnack({ open: true, msg: "Server connected" });
 
+      const payload = {
+        type: "text",
+        text: "TEST SERVER\nHELLO PRINTER\n\n\n"
+      };
+
+      ws.send(JSON.stringify(payload));
+
       setTimeout(() => {
         ws.close();
       }, 500);
