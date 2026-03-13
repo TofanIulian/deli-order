@@ -1415,6 +1415,37 @@ function testFully() {
   }
 }
 
+const testPrintLoyverse = () => {
+  const receipt = `
+WRIGHTS FOOD FAYRE
+------------------------
+TEST ORDER
+Coffee        EUR 2.50
+Sandwich      EUR 4.50
+------------------------
+TOTAL         EUR 7.00
+
+Thank you!
+`;
+
+  const iframe = document.createElement("iframe");
+  iframe.style.display = "none";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow.document;
+
+  doc.open();
+  doc.write(`<pre style="font-size:22px; font-family: monospace;">${receipt}</pre>`);
+  doc.close();
+
+  iframe.contentWindow.focus();
+  iframe.contentWindow.print();
+
+  setTimeout(() => {
+    document.body.removeChild(iframe);
+  }, 3000);
+};
+
 return (
   <>
     <style>
@@ -1500,20 +1531,8 @@ QR
 )}
 
 {isStaff && staffAllowed && (
-<Button
-color="inherit"
-onClick={() => printOrderBrowser({
-code: "TEST01",
-pickupDate: "2026-03-08",
-pickupTime: "12:15 - 12:30",
-items: [
-{ name: "Breakfast Roll", price: 5 },
-{ name: "Coffee", price: 2.5 }
-],
-total: 7.5
-})}
->
-Test Print
+<Button color="inherit" onClick={testPrintLoyverse}>
+  Test Print
 </Button>
 )}
 
