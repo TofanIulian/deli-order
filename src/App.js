@@ -1428,22 +1428,30 @@ TOTAL         EUR 7.00
 Thank you!
 `;
 
-  const iframe = document.createElement("iframe");
-  iframe.style.display = "none";
-  document.body.appendChild(iframe);
+  const printWindow = window.open("", "_blank", "width=400,height=700");
 
-  const doc = iframe.contentWindow.document;
+  if (!printWindow) {
+    alert("Print window blocked");
+    return;
+  }
 
-  doc.open();
-  doc.write(`<pre style="font-size:22px; font-family: monospace;">${receipt}</pre>`);
-  doc.close();
-
-  iframe.contentWindow.focus();
-  iframe.contentWindow.print();
+  printWindow.document.open();
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Print Test</title>
+      </head>
+      <body>
+        <pre style="font-size:22px; font-family: monospace; white-space: pre-wrap;">${receipt}</pre>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
 
   setTimeout(() => {
-    document.body.removeChild(iframe);
-  }, 3000);
+    printWindow.focus();
+    printWindow.print();
+  }, 1000);
 };
 
 return (
