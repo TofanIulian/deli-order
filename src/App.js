@@ -243,13 +243,7 @@ const [historySelected, setHistorySelected] = useState(null);
 const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
 const [lateWarningIds, setLateWarningIds] = useState([]);
 const warnedLateOrdersRef = useRef(new Set());
-const [printMode, setPrintMode] = useState(false);
-const [printOrderData, setPrintOrderData] = useState(null);
 
-function printOrderBrowser(order) {
-setPrintOrderData(order);
-setPrintMode(true);
-}
 
 const STAFF_FONT_SCALE = isTablet ? 1.35 : 1; // ajustează 1.25 / 1.4 după gust
 useEffect(() => {
@@ -866,26 +860,7 @@ const [hh, mm] = start.split(":").map(Number);
 return hh * 60 + mm;
 }
 
-useEffect(() => {
-  if (!printMode || !printOrderData) return;
 
-  const t = setTimeout(() => {
-    try {
-      if (window.fully) {
-        window.fully.print();
-      } else {
-        window.print();
-      }
-    } finally {
-      setTimeout(() => {
-        setPrintMode(false);
-        setPrintOrderData(null);
-      }, 1500);
-    }
-  }, 500);
-
-  return () => clearTimeout(t);
-}, [printMode, printOrderData]);
 
 
 
@@ -1372,36 +1347,62 @@ function buildReceiptText(order) {
   return lines.join("\n");
 }
 
-function testRawbtServer() {
+async function printOrderSilent(order) {
+  const text = buildReceiptText(order) + "\n\n\n\n\n";
+
+  const res = await fetch("http://127.0.0.1:3000/print", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      host: "192.168.1.100",
+      port: 9100,
+      text
+    })
+  });
+
+  if (!res.ok) {
+    const msg = await res.text().catch(() => "");
+    throw new Error(msg || "Print failed");
+  }
+
+  return res.json().catch(() => ({ ok: true }));
+}
+
+async function testSilentPrint() {
   try {
-    const ws = new WebSocket("ws://127.0.0.1:40213/");
+    const res = await fetch("http://127.0.0.1:3000/print", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        host: "192.168.1.100",
+        port: 9100,
+        text:
+          "WRIGHTS FOOD FAYRE\n" +
+          "------------------------------\n" +
+          "TEST PRINT\n" +
+          "Line 1\n" +
+          "Line 2\n" +
+          "\n\n\n\n\n"
+      })
+    });
 
-    ws.onopen = () => {
-      setSnack({ open: true, msg: "Server connected" });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "");
+      throw new Error(msg || "Silent print failed");
+    }
 
-      const text =
-        "HELLO\n" +
-        "TEST PRINT\n" +
-        "----------------\n" +
-        "LINE 1\n" +
-        "LINE 2\n" +
-        "\n\n\n\n\n\n";
-
-      ws.send(text);
-
-      setTimeout(() => {
-        ws.close();
-      }, 2000);
-    };
-
-    ws.onerror = () => {
-      setSnack({ open: true, msg: "Server connection failed" });
-    };
+    setSnack({ open: true, msg: "Silent print sent" });
   } catch (err) {
-    console.error(err);
-    setSnack({ open: true, msg: "Server exception" });
+    console.error("Silent print error:", err);
+    setSnack({ open: true, msg: "Silent print failed" });
   }
 }
+
+
 
 function testFully() {
   try {
@@ -1456,64 +1457,11 @@ Thank you!
 
 return (
   <>
-    <style>
-      {`
-    @media print {
-      .app-screen {
-        display: none !important;
-      }
-
-      .print-ticket {
-        display: block !important;
-        width: 72mm !important;
-        margin: 0 auto !important;
-        padding: 4mm !important;
-        box-sizing: border-box !important;
-        background: white !important;
-        color: black !important;
-        font-family: monospace !important;
-      }
-
-      body {
-        margin: 0 !important;
-        padding: 0 !important;
-        background: white !important;
-      }
-    }
-  `}
-    </style>
-
-    {printMode && printOrderData && (
-      <Box
-        className="print-ticket"
-        sx={{
-          width: "72mm",
-          margin: "0 auto",
-          padding: "4mm",
-          background: "#fff",
-          color: "#000",
-          fontFamily: "monospace",
-          boxSizing: "border-box"
-        }}
-      >
-        <pre
-          style={{
-            margin: 0,
-            whiteSpace: "pre-wrap",
-            fontFamily: "monospace",
-            fontSize: "18px",
-            lineHeight: 1.35,
-            textAlign: "left"
-          }}
-        >
-          {buildReceiptText(printOrderData)}
-        </pre>
-      </Box>
-    )}
+    
   
 
 
-<Box className="app-screen" sx={{ display: printMode ? "none" : "block" }}>
+<Box className="app-screen">
 
 <AppBar position="sticky" elevation={1}>
 <Toolbar>
@@ -1545,8 +1493,8 @@ QR
 )}
 
 {isStaff && staffAllowed && (
-  <Button color="inherit" onClick={testRawbtServer}>
-    Server Test
+  <Button color="inherit" onClick={testSilentPrint}>
+    Silent Test
   </Button>
 )}
 
@@ -2366,11 +2314,17 @@ In progress
 <Button
 variant="contained"
 sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-onClick={() => {
-if (!window.confirm("Print final receipt and mark this order as READY?")) return;
+onClick={async () => {
+  if (!window.confirm("Print final receipt and mark this order as READY?")) return;
 
-printOrderBrowser(order);
-setStatus(order.id, order.code, STATUS.READY);
+  try {
+    await printOrderSilent(order);
+    await setStatus(order.id, order.code, STATUS.READY);
+    setSnack({ open: true, msg: "Printed and marked READY" });
+  } catch (err) {
+    console.error("Print error:", err);
+    setSnack({ open: true, msg: "Print failed - order NOT marked READY" });
+  }
 }}
 >
 Ready
