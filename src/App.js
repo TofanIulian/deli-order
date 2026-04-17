@@ -1316,14 +1316,16 @@ window.removeEventListener("touchstart", unlock);
 };
 }, [isStaff]);
 
-function formatLine(left, right, width = 32) {
-const l = left ?? "";
-const r = right ?? "";
-const spaces = Math.max(width - l.length - r.length, 1);
-return l + " ".repeat(spaces) + r;
+const RECEIPT_WIDTH = 42;
+
+function formatLine(left, right, width = RECEIPT_WIDTH) {
+  const l = String(left ?? "");
+  const r = String(right ?? "");
+  const spaces = Math.max(width - l.length - r.length, 1);
+  return l + " ".repeat(spaces) + r;
 }
 
-function wrapText(text, width = 28) {
+function wrapText(text, width = 34) {
   const words = String(text || "").split(/\s+/).filter(Boolean);
   const lines = [];
   let current = "";
@@ -1379,32 +1381,31 @@ function extractOptionBlocks(displayName, plainName) {
 
   if (!details) return [];
 
-  const blocks = [];
   const labels = ["Chicken:", "Sauce:", "Salads:"];
+  const blocks = [];
 
-  let rest = details;
-
-  labels.forEach((label, index) => {
-    const start = rest.indexOf(label);
+  labels.forEach((label) => {
+    const start = details.indexOf(label);
     if (start === -1) return;
 
-    const afterStart = rest.slice(start + label.length);
+    const afterStart = details.slice(start + label.length);
     let end = afterStart.length;
 
-    for (let j = 0; j < labels.length; j++) {
-      const nextLabel = labels[j];
-      if (nextLabel === label) continue;
+    labels.forEach((nextLabel) => {
+      if (nextLabel === label) return;
       const nextIndex = afterStart.indexOf(nextLabel);
       if (nextIndex !== -1 && nextIndex < end) {
         end = nextIndex;
       }
-    }
+    });
 
     const value = afterStart.slice(0, end).trim().replace(/^-+/, "").trim();
-    blocks.push({
-      label: label.replace(":", ""),
-      value
-    });
+    if (value) {
+      blocks.push({
+        label: label.replace(":", ""),
+        value
+      });
+    }
   });
 
   if (blocks.length > 0) return blocks;
@@ -1423,7 +1424,8 @@ function buildReceiptText(order) {
     const baseName = it.name || it.displayName || "Item";
     const price = Number(it.price || 0).toFixed(2);
 
-    lines.push(formatLine(baseName, price, 32));
+    // marker pentru bold pe produs
+    lines.push(`[[BOLD]]${formatLine(baseName, price, RECEIPT_WIDTH)}[[/BOLD]]`);
 
     const displayName = String(it.displayName || "").trim();
     const plainName = String(it.name || "").trim();
@@ -1431,14 +1433,14 @@ function buildReceiptText(order) {
     const optionBlocks = extractOptionBlocks(displayName, plainName);
 
     optionBlocks.forEach((block) => {
-      lines.push(...formatOptionBlock(block.label, block.value, 20));
+      lines.push(...formatOptionBlock(block.label, block.value, 28));
     });
 
     lines.push("");
   });
 
-  lines.push("--------------------------------");
-  lines.push(formatLine("TOTAL", Number(order.total || 0).toFixed(2), 32));
+  lines.push("------------------------------------------");
+  lines.push(formatLine("TOTAL", Number(order.total || 0).toFixed(2), RECEIPT_WIDTH));
   lines.push("");
   lines.push("Thank you!");
 
