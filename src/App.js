@@ -1325,7 +1325,7 @@ function formatLine(left, right, width = RECEIPT_WIDTH) {
   return l + " ".repeat(spaces) + r;
 }
 
-function wrapText(text, width = 34) {
+function wrapText(text, width = 24) {
   const words = String(text || "").split(/\s+/).filter(Boolean);
   const lines = [];
   let current = "";
@@ -1346,77 +1346,30 @@ function wrapText(text, width = 34) {
 
 function cleanOptionText(text) {
   return String(text || "")
-    .replace(/[•●▪■►▶]/g, "-")
+    .replace(/[↑¢•●▪■►▶]/g, "")
     .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ", ")
     .trim();
 }
 
-function formatOptionBlock(label, value, width = 24) {
-  const cleanLabel = String(label || "").trim().toUpperCase();
-  const cleanValue = cleanOptionText(value);
+function extractField(details, label, nextLabels = []) {
+  const startRegex = new RegExp(`${label}:\\s*`, "i");
+  const startMatch = details.match(startRegex);
+  if (!startMatch) return "";
 
-  if (!cleanValue) return [];
+  const startIndex = startMatch.index + startMatch[0].length;
+  let endIndex = details.length;
 
-  const wrapped = wrapText(cleanValue, width);
-  if (wrapped.length === 0) return [];
-
-  const lines = [];
-  lines.push(`  ${cleanLabel}: ${wrapped[0]}`);
-  for (let i = 1; i < wrapped.length; i++) {
-    lines.push(`  ${" ".repeat(cleanLabel.length + 2)}${wrapped[i]}`);
-  }
-  return lines;
-}
-
-function extractOptionBlocks(displayName, plainName) {
-  let details = String(displayName || "").trim();
-  if (!details) return [];
-
-  if (plainName && details.startsWith(plainName)) {
-    details = details.slice(plainName.length).trim();
-  }
-
-  details = details.replace(/^\(|\)$/g, "").trim();
-  details = cleanOptionText(details);
-
-  if (!details) return [];
-
-  const labels = ["Chicken:", "Sauce:", "Salads:"];
-  const blocks = [];
-
-  labels.forEach((label) => {
-    const start = details.indexOf(label);
-    if (start === -1) return;
-
-    const afterStart = details.slice(start + label.length);
-    let end = afterStart.length;
-
-    labels.forEach((nextLabel) => {
-      if (nextLabel === label) return;
-      const nextIndex = afterStart.indexOf(nextLabel);
-      if (nextIndex !== -1 && nextIndex < end) {
-        end = nextIndex;
-      }
-    });
-
-    const value = afterStart
-  .slice(0, end)
-  .trim()
-  .replace(/^-+/, "")
-  .replace(/-+$/, "")
-  .trim();
-  
-    if (value) {
-      blocks.push({
-        label: label.replace(":", ""),
-        value
-      });
+  nextLabels.forEach((nextLabel) => {
+    const regex = new RegExp(`\\s${nextLabel}:\\s*`, "i");
+    const sliced = details.slice(startIndex);
+    const match = sliced.match(regex);
+    if (match && startIndex + match.index < endIndex) {
+      endIndex = startIndex + match.index;
     }
   });
 
-  if (blocks.length > 0) return blocks;
-
-  return [{ label: "OPTIONS", value: details }];
+  return details.slice(startIndex, endIndex).trim().replace(/-+$/g, "").trim();
 }
 
 function buildReceiptText(order) {
@@ -1427,28 +1380,54 @@ function buildReceiptText(order) {
   lines.push("");
 
   (order.items || []).forEach((it) => {
-    const baseName = it.name || it.displayName || "Item";
+    const baseName = String(it.name || it.displayName || "Item").trim();
     const price = Number(it.price || 0).toFixed(2);
 
-    // marker pentru bold pe produs
     lines.push(`[[BOLD]]${formatLine(baseName, price, RECEIPT_WIDTH)}[[/BOLD]]`);
 
-    const displayName = String(it.displayName || "").trim();
-    const plainName = String(it.name || "").trim();
+    const displayName = cleanOptionText(it.displayName || "");
+    const plainName = cleanOptionText(it.name || "");
 
-    const optionBlocks = extractOptionBlocks(displayName, plainName);
+    let details = displayName;
+    if (plainName && details.startsWith(plainName)) {
+      details = details.slice(plainName.length).trim();
+    }
 
-    optionBlocks.forEach((block) => {
-      lines.push(...formatOptionBlock(block.label, block.value, 28));
-    });
+    details = details.replace(/^\(|\)$/g, "").trim();
+
+    const chicken = cleanOptionText(
+      extractField(details, "Chicken", ["Sauce", "Salads"])
+    );
+    const sauce = cleanOptionText(
+      extractField(details, "Sauce", ["Salads"])
+    );
+    const salads = cleanOptionText(
+      extractField(details, "Salads", [])
+    );
+
+    if (chicken) {
+      wrapText(chicken, 24).forEach((line, idx) => {
+        lines.push(idx === 0 ? `  Chicken: ${line}` : `           ${line}`);
+      });
+    }
+
+    if (sauce) {
+      wrapText(sauce, 25).forEach((line, idx) => {
+        lines.push(idx === 0 ? `  Sauce: ${line}` : `         ${line}`);
+      });
+    }
+
+    if (salads) {
+      wrapText(salads, 24).forEach((line, idx) => {
+        lines.push(idx === 0 ? `  Salads: ${line}` : `          ${line}`);
+      });
+    }
 
     lines.push("");
   });
 
   lines.push("------------------------------------");
-  lines.push(formatLine("TOTAL", Number(order.total || 0).toFixed(2), RECEIPT_WIDTH));
-  lines.push("");
-  lines.push("Thank you!");
+  lines.push(`[[BOLD]]${formatLine("TOTAL", Number(order.total || 0).toFixed(2), RECEIPT_WIDTH)}[[/BOLD]]`);
 
   return lines.join("\n");
 }
