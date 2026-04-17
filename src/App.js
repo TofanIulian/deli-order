@@ -1353,23 +1353,31 @@ function cleanOptionText(text) {
 }
 
 function extractField(details, label, nextLabels = []) {
-  const startRegex = new RegExp(`${label}:\\s*`, "i");
-  const startMatch = details.match(startRegex);
-  if (!startMatch) return "";
+  const labelRegex = new RegExp(`${label}:\\s*`, "i");
+  const labelMatch = labelRegex.exec(details);
+  if (!labelMatch) return "";
 
-  const startIndex = startMatch.index + startMatch[0].length;
+  const startIndex = labelMatch.index + labelMatch[0].length;
   let endIndex = details.length;
 
   nextLabels.forEach((nextLabel) => {
-    const regex = new RegExp(`\\s${nextLabel}:\\s*`, "i");
+    const nextRegex = new RegExp(`${nextLabel}:\\s*`, "i");
     const sliced = details.slice(startIndex);
-    const match = sliced.match(regex);
-    if (match && startIndex + match.index < endIndex) {
-      endIndex = startIndex + match.index;
+    const nextMatch = nextRegex.exec(sliced);
+
+    if (nextMatch) {
+      const candidateEnd = startIndex + nextMatch.index;
+      if (candidateEnd < endIndex) {
+        endIndex = candidateEnd;
+      }
     }
   });
 
-  return details.slice(startIndex, endIndex).trim().replace(/-+$/g, "").trim();
+  return details
+    .slice(startIndex, endIndex)
+    .trim()
+    .replace(/-+$/g, "")
+    .trim();
 }
 
 function buildReceiptText(order) {
@@ -1407,19 +1415,19 @@ function buildReceiptText(order) {
 
     if (chicken) {
       wrapText(chicken, 24).forEach((line, idx) => {
-        lines.push(idx === 0 ? `  Chicken: ${line}` : `           ${line}`);
+        lines.push(idx === 0 ? `  CHICKEN: ${line}` : `           ${line}`);
       });
     }
 
     if (sauce) {
       wrapText(sauce, 25).forEach((line, idx) => {
-        lines.push(idx === 0 ? `  Sauce: ${line}` : `         ${line}`);
+        lines.push(idx === 0 ? `  SAUCE: ${line}` : `         ${line}`);
       });
     }
 
     if (salads) {
       wrapText(salads, 24).forEach((line, idx) => {
-        lines.push(idx === 0 ? `  Salads: ${line}` : `          ${line}`);
+        lines.push(idx === 0 ? `  SALADS: ${line}` : `          ${line}`);
       });
     }
 
