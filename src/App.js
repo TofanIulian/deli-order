@@ -1326,12 +1326,9 @@ return l + " ".repeat(spaces) + r;
 function buildReceiptText(order) {
   const lines = [];
 
-  lines.push("WRIGHTS FOOD FAYRE");
-  lines.push("");
-  lines.push(order.code || "");
-  lines.push("");
+  lines.push(`Order: ${order.code || ""}`);
   lines.push(`Pickup: ${order.pickupDate || ""} ${order.pickupTime || ""}`);
-  lines.push("--------------------------------");
+  lines.push("");
 
   (order.items || []).forEach((it) => {
     const name = it.displayName || it.name || "";
@@ -1339,6 +1336,7 @@ function buildReceiptText(order) {
     lines.push(formatLine(name, price, 32));
   });
 
+  lines.push("");
   lines.push("--------------------------------");
   lines.push(formatLine("TOTAL", `€${Number(order.total || 0).toFixed(2)}`, 32));
   lines.push("");
