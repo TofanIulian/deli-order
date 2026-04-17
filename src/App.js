@@ -1323,7 +1323,7 @@ const spaces = Math.max(width - l.length - r.length, 1);
 return l + " ".repeat(spaces) + r;
 }
 
-function wrapText(text, width = 30) {
+function wrapText(text, width = 28) {
   const words = String(text || "").split(/\s+/).filter(Boolean);
   const lines = [];
   let current = "";
@@ -1349,6 +1349,69 @@ function cleanOptionText(text) {
     .trim();
 }
 
+function formatOptionBlock(label, value, width = 28) {
+  const cleanLabel = String(label || "").trim().toUpperCase();
+  const cleanValue = cleanOptionText(value);
+
+  if (!cleanValue) return [];
+
+  const wrapped = wrapText(cleanValue, width);
+  if (wrapped.length === 0) return [];
+
+  const lines = [];
+  lines.push(`  ${cleanLabel}: ${wrapped[0]}`);
+  for (let i = 1; i < wrapped.length; i++) {
+    lines.push(`  ${" ".repeat(cleanLabel.length + 2)}${wrapped[i]}`);
+  }
+  return lines;
+}
+
+function extractOptionBlocks(displayName, plainName) {
+  let details = String(displayName || "").trim();
+  if (!details) return [];
+
+  if (plainName && details.startsWith(plainName)) {
+    details = details.slice(plainName.length).trim();
+  }
+
+  details = details.replace(/^\(|\)$/g, "").trim();
+  details = cleanOptionText(details);
+
+  if (!details) return [];
+
+  const blocks = [];
+  const labels = ["Chicken:", "Sauce:", "Salads:"];
+
+  let rest = details;
+
+  labels.forEach((label, index) => {
+    const start = rest.indexOf(label);
+    if (start === -1) return;
+
+    const afterStart = rest.slice(start + label.length);
+    let end = afterStart.length;
+
+    for (let j = 0; j < labels.length; j++) {
+      const nextLabel = labels[j];
+      if (nextLabel === label) continue;
+      const nextIndex = afterStart.indexOf(nextLabel);
+      if (nextIndex !== -1 && nextIndex < end) {
+        end = nextIndex;
+      }
+    }
+
+    const value = afterStart.slice(0, end).trim().replace(/^-+/, "").trim();
+    blocks.push({
+      label: label.replace(":", ""),
+      value
+    });
+  });
+
+  if (blocks.length > 0) return blocks;
+
+  return [{ label: "OPTIONS", value: details }];
+}
+
 function buildReceiptText(order) {
   const lines = [];
 
@@ -1360,29 +1423,16 @@ function buildReceiptText(order) {
     const baseName = it.name || it.displayName || "Item";
     const price = Number(it.price || 0).toFixed(2);
 
-    // produs principal
     lines.push(formatLine(baseName, price, 32));
 
-    // dacă displayName e mai lung decât name, tratăm restul ca detalii
     const displayName = String(it.displayName || "").trim();
     const plainName = String(it.name || "").trim();
 
-    if (displayName && plainName && displayName !== plainName) {
-      let details = displayName;
+    const optionBlocks = extractOptionBlocks(displayName, plainName);
 
-      if (details.startsWith(plainName)) {
-        details = details.slice(plainName.length).trim();
-      }
-
-      details = details.replace(/^\(|\)$/g, "").trim();
-      details = cleanOptionText(details);
-
-      if (details) {
-        wrapText(details, 28).forEach((line) => {
-          lines.push(`  ${line}`);
-        });
-      }
-    }
+    optionBlocks.forEach((block) => {
+      lines.push(...formatOptionBlock(block.label, block.value, 20));
+    });
 
     lines.push("");
   });
