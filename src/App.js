@@ -1323,37 +1323,72 @@ const spaces = Math.max(width - l.length - r.length, 1);
 return l + " ".repeat(spaces) + r;
 }
 
+function wrapText(text, width = 30) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = "";
+
+  words.forEach((word) => {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= width) {
+      current = next;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+  });
+
+  if (current) lines.push(current);
+  return lines;
+}
+
+function cleanOptionText(text) {
+  return String(text || "")
+    .replace(/[•●▪■►▶]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function buildReceiptText(order) {
   const lines = [];
 
-  // ORDER + PICKUP
   lines.push(`Order: ${order.code || ""}`);
   lines.push(`Pickup: ${order.pickupDate || ""} ${order.pickupTime || ""}`);
   lines.push("");
 
-  // ITEMS
   (order.items || []).forEach((it) => {
-    const name = it.displayName || it.name || "";
-    const price = `${Number(it.price || 0).toFixed(2)}`;
+    const baseName = it.name || it.displayName || "Item";
+    const price = Number(it.price || 0).toFixed(2);
 
     // produs principal
-    lines.push(formatLine(name, price, 32));
+    lines.push(formatLine(baseName, price, 32));
 
-    // opțiuni / descriere (pe linii separate)
-    if (it.description) {
-      const parts = it.description.split(","); // spargem după virgulă
-      parts.forEach((p) => {
-        lines.push("  - " + p.trim());
-      });
+    // dacă displayName e mai lung decât name, tratăm restul ca detalii
+    const displayName = String(it.displayName || "").trim();
+    const plainName = String(it.name || "").trim();
+
+    if (displayName && plainName && displayName !== plainName) {
+      let details = displayName;
+
+      if (details.startsWith(plainName)) {
+        details = details.slice(plainName.length).trim();
+      }
+
+      details = details.replace(/^\(|\)$/g, "").trim();
+      details = cleanOptionText(details);
+
+      if (details) {
+        wrapText(details, 28).forEach((line) => {
+          lines.push(`  ${line}`);
+        });
+      }
     }
+
+    lines.push("");
   });
 
-  lines.push("");
   lines.push("--------------------------------");
-
-  // TOTAL (fără €)
-  lines.push(formatLine("TOTAL", `${Number(order.total || 0).toFixed(2)}`, 32));
-
+  lines.push(formatLine("TOTAL", Number(order.total || 0).toFixed(2), 32));
   lines.push("");
   lines.push("Thank you!");
 
@@ -2085,19 +2120,7 @@ label="Only open orders" />
 Orders (live)
 </Typography>
 
-<Button
-  variant="outlined"
-  sx={{ mb: 2 }}
-  onClick={() => {
-    if (window.fully) {
-      window.fully.showToast("Fully API works");
-    } else {
-      alert("Fully API not available");
-    }
-  }}
->
-  Fully Test
-</Button>
+
 
 {staffOrders.length === 0 && (
 <Typography sx={{ opacity: 0.7 }}>No orders yet.</Typography>
