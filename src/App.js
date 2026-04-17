@@ -1326,19 +1326,34 @@ return l + " ".repeat(spaces) + r;
 function buildReceiptText(order) {
   const lines = [];
 
+  // ORDER + PICKUP
   lines.push(`Order: ${order.code || ""}`);
   lines.push(`Pickup: ${order.pickupDate || ""} ${order.pickupTime || ""}`);
   lines.push("");
 
+  // ITEMS
   (order.items || []).forEach((it) => {
     const name = it.displayName || it.name || "";
-    const price = `€${Number(it.price || 0).toFixed(2)}`;
+    const price = `${Number(it.price || 0).toFixed(2)}`;
+
+    // produs principal
     lines.push(formatLine(name, price, 32));
+
+    // opțiuni / descriere (pe linii separate)
+    if (it.description) {
+      const parts = it.description.split(","); // spargem după virgulă
+      parts.forEach((p) => {
+        lines.push("  - " + p.trim());
+      });
+    }
   });
 
   lines.push("");
   lines.push("--------------------------------");
-  lines.push(formatLine("TOTAL", `€${Number(order.total || 0).toFixed(2)}`, 32));
+
+  // TOTAL (fără €)
+  lines.push(formatLine("TOTAL", `${Number(order.total || 0).toFixed(2)}`, 32));
+
   lines.push("");
   lines.push("Thank you!");
 
@@ -1368,90 +1383,6 @@ async function printOrderSilent(order) {
   return res.json().catch(() => ({ ok: true }));
 }
 
-async function testSilentPrint() {
-  try {
-    const res = await fetch("http://127.0.0.1:3000/print", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        host: "192.168.1.100",
-        port: 9100,
-        text:
-          "WRIGHTS FOOD FAYRE\n" +
-          "------------------------------\n" +
-          "TEST PRINT\n" +
-          "Line 1\n" +
-          "Line 2\n" +
-          "\n\n\n\n\n"
-      })
-    });
-
-    if (!res.ok) {
-      const msg = await res.text().catch(() => "");
-      throw new Error(msg || "Silent print failed");
-    }
-
-    setSnack({ open: true, msg: "Silent print sent" });
-  } catch (err) {
-    console.error("Silent print error:", err);
-    setSnack({ open: true, msg: "Silent print failed" });
-  }
-}
-
-
-
-function testFully() {
-  try {
-    if (window.fully) {
-      window.fully.showToast("Fully API works");
-    } else {
-      alert("Fully API not available");
-    }
-  } catch (e) {
-    alert("Fully error");
-  }
-}
-
-const testPrintLoyverse = () => {
-  const receipt = `
-WRIGHTS FOOD FAYRE
-------------------------
-TEST ORDER
-Coffee        EUR 2.50
-Sandwich      EUR 4.50
-------------------------
-TOTAL         EUR 7.00
-
-Thank you!
-`;
-
-  const printWindow = window.open("", "_blank", "width=400,height=700");
-
-  if (!printWindow) {
-    alert("Print window blocked");
-    return;
-  }
-
-  printWindow.document.open();
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>Print Test</title>
-      </head>
-      <body>
-        <pre style="font-size:22px; font-family: monospace; white-space: pre-wrap;">${receipt}</pre>
-      </body>
-    </html>
-  `);
-  printWindow.document.close();
-
-  setTimeout(() => {
-    printWindow.focus();
-    printWindow.print();
-  }, 1000);
-};
 
 return (
   <>
@@ -1484,21 +1415,11 @@ QR
 </Button>
 )}
 
-{isStaff && staffAllowed && (
-<Button color="inherit" onClick={testPrintLoyverse}>
-  Test Print
-</Button>
-)}
 
-{isStaff && staffAllowed && (
-  <Button color="inherit" onClick={testSilentPrint}>
-    Silent Test
-  </Button>
-)}
 
-<Button onClick={testFully}>
-  Fully Test
-</Button>
+
+
+
 
 </Toolbar>
 </AppBar><Container maxWidth="lg" sx={{ py: 3 }}>
