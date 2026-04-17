@@ -1316,7 +1316,7 @@ window.removeEventListener("touchstart", unlock);
 };
 }, [isStaff]);
 
-const RECEIPT_WIDTH = 42;
+const RECEIPT_WIDTH = 36;
 
 function formatLine(left, right, width = RECEIPT_WIDTH) {
   const l = String(left ?? "");
@@ -1351,7 +1351,7 @@ function cleanOptionText(text) {
     .trim();
 }
 
-function formatOptionBlock(label, value, width = 28) {
+function formatOptionBlock(label, value, width = 24) {
   const cleanLabel = String(label || "").trim().toUpperCase();
   const cleanValue = cleanOptionText(value);
 
@@ -1399,7 +1399,13 @@ function extractOptionBlocks(displayName, plainName) {
       }
     });
 
-    const value = afterStart.slice(0, end).trim().replace(/^-+/, "").trim();
+    const value = afterStart
+  .slice(0, end)
+  .trim()
+  .replace(/^-+/, "")
+  .replace(/-+$/, "")
+  .trim();
+  
     if (value) {
       blocks.push({
         label: label.replace(":", ""),
@@ -1439,7 +1445,7 @@ function buildReceiptText(order) {
     lines.push("");
   });
 
-  lines.push("------------------------------------------");
+  lines.push("------------------------------------");
   lines.push(formatLine("TOTAL", Number(order.total || 0).toFixed(2), RECEIPT_WIDTH));
   lines.push("");
   lines.push("Thank you!");
