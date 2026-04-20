@@ -226,6 +226,45 @@ const closeMinutes = 23 * 60; // 23:00
 return minutesNow >= openMinutes && minutesNow < closeMinutes;
 }
 
+function buildStructuredCartItem(product, customSelections, selectedSalads, configTotalPrice) {
+  const selections = { ...customSelections };
+  const selectionLabels = {};
+
+  (product?.config?.options || []).forEach((opt) => {
+    selectionLabels[opt.key] = opt.label || opt.key;
+  });
+
+  if (product?.config?.salads?.enabled && selectedSalads.length > 0) {
+    selections.salads = [...selectedSalads];
+    selectionLabels.salads = "Salads";
+  }
+
+  return {
+    productId: product.id,
+    name: product.name,
+    price: Number(configTotalPrice.toFixed(2)),
+    selections,
+    selectionLabels
+  };
+}
+
+function formatCartItemDisplay(item) {
+  const selections = item?.selections || {};
+  const selectionLabels = item?.selectionLabels || {};
+
+  const parts = Object.entries(selections)
+    .filter(([, value]) => {
+      if (Array.isArray(value)) return value.length > 0;
+      return !!value;
+    })
+    .map(([key, value]) => {
+      const label = selectionLabels[key] || key;
+      const text = Array.isArray(value) ? value.join(", ") : String(value);
+      return `${label}: ${text}`;
+    });
+
+  return parts.length ? `${item.name} (${parts.join(" • ")})` : item.name;
+}
 
 export default function App() {
 // ===== MODE =====
@@ -981,15 +1020,18 @@ createdAt: serverTimestamp()
 };
 
 const entry = {
-code,
-pickupDate,
-pickupTime: pickupSlot.label,
-total: Number(total.toFixed(2)),
-items: cart.map((it) => ({
-name: it.displayName || it.name,
-price: Number(it.price || 0)
-})),
-createdAt: Date.now()
+  code,
+  pickupDate,
+  pickupTime: pickupSlot.label,
+  total: Number(total.toFixed(2)),
+  items: cart.map((it) => ({
+    productId: it.productId || null,
+    name: it.name,
+    price: Number(it.price || 0),
+    selections: it.selections || {},
+    selectionLabels: it.selectionLabels || {}
+  })),
+  createdAt: Date.now()
 };
 
 
@@ -1692,7 +1734,7 @@ mb: 1
 </Typography>
 
 <Typography variant="body2" sx={{ opacity: 0.75 }} noWrap>
-{(o.items || []).map((it) => it.name).join(", ")}
+{(o.items || []).map((it) => formatCartItemDisplay(it)).join(", ")}
 </Typography>
 </Box>
 
@@ -1717,9 +1759,11 @@ variant="contained"
 sx={{ fontWeight: 900 }}
 onClick={() => {
 const itemsToAdd = (o.items || []).map((it) => ({
-name: it.name,
-displayName: it.name,
-price: it.price
+  productId: it.productId || null,
+  name: it.name,
+  price: Number(it.price || 0),
+  selections: it.selections || {},
+  selectionLabels: it.selectionLabels || {}
 }));
 
 setCart((prev) => [...prev, ...itemsToAdd]);
@@ -1950,7 +1994,7 @@ justifyContent="space-between"
 >
 <Box sx={{ pr: 1 }}>
 <Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
-{item.displayName || item.name}
+{formatCartItemDisplay(item)}
 </Typography>
 <Typography variant="body2" sx={{ opacity: 0.75 }}>
 {formatEUR(item.price)}
@@ -2266,7 +2310,7 @@ borderRadius: 999
 key={idx}
 sx={{ fontSize: 14 * STAFF_FONT_SCALE, fontWeight: 800, lineHeight: 1.35 }}
 >
-- {it.displayName || it.name} ({formatEUR(it.price)})
+- {formatCartItemDisplay(it)} ({formatEUR(it.price)})
 </Typography>
 ))}
 
@@ -2836,33 +2880,17 @@ Cancel
 variant="contained"
 disabled={disableAddToCart}
 onClick={() => {
-if (!configProduct) return;
+  const item = buildStructuredCartItem(
+    configProduct,
+    customSelections,
+    selectedSalads,
+    configTotalPrice
+  );
 
-const opts = configProduct?.config?.options || [];
-const optText = opts
-.map((o) => {
-const v = customSelections[o.key];
-if (!v) return null;
-return Array.isArray(v) ? `${o.label}: ${v.join(", ")}` : `${o.label}: ${v}`;
-})
-.filter(Boolean)
-.join(" • ");
-
-const saladsText =
-saladsEnabled && selectedSalads.length ? `Salads: ${selectedSalads.join(", ")}` : "";
-
-const parts = [optText, saladsText].filter(Boolean).join(" • ");
-const displayName = parts ? `${configProduct.name} (${parts})` : configProduct.name;
-
-addToCart({
-...configProduct,
-price: Number(configTotalPrice.toFixed(2)),
-displayName,
-custom: { selections: customSelections, salads: selectedSalads }
-});
-
-setConfigOpen(false);
+  addToCart(item);
+  setConfigOpen(false);
 }}
+
 sx={{ fontWeight: 900 }}
 >
 Add to cart
