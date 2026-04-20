@@ -318,6 +318,18 @@ const [y, m, d] = iso.split("-");
 return `${d}/${m}/${String(y).slice(2)}`;
 }
 
+function getDaySectionLabel(iso) {
+  if (!iso) return "";
+
+  const today = toLocalISODate(new Date());
+  const tomorrow = addDaysISO(today, 1);
+
+  if (iso === today) return "TODAY";
+  if (iso === tomorrow) return "TOMORROW";
+
+  return formatPickupDateShort(iso);
+}
+
 function ReportsPanel({ orders }) {
 const todayStr = toLocalISODate(new Date());
 
@@ -1237,10 +1249,21 @@ setEditProduct(null);
 }
 
 // ===== STAFF ORDERS SORT/FILTER =====
-const sortedOrders = useMemo(
-() => [...orders].sort((a, b) => (a.pickupTime || "").localeCompare(b.pickupTime || "")),
-[orders]
-);
+const sortedOrders = useMemo(() => {
+  return [...orders].sort((a, b) => {
+    const dateA = a.pickupDate || "";
+    const dateB = b.pickupDate || "";
+
+    if (dateA !== dateB) {
+      return dateB.localeCompare(dateA);
+    }
+
+    const timeA = a.pickupStartMin ?? 0;
+    const timeB = b.pickupStartMin ?? 0;
+
+    return timeB - timeA;
+  });
+}, [orders]);
 
 const staffOrders = useMemo(
 () => (showOnlyOpen ? sortedOrders.filter((o) => normalizeStatus(o.status) !== STATUS.READY) : sortedOrders),
@@ -2177,315 +2200,394 @@ size="small" />
 
 {/* STAFF UI */}
 {isStaff && staffAllowed && (
-<Box>
-<Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2, flexWrap: "wrap" }}>
-<Tabs value={staffTab} onChange={(_, v) => setStaffTab(v)}>
-<Tab label="Orders" value="orders" />
-{isAdminRole && <Tab label="Products" value="products" />}
-{isAdminRole && <Tab label="Reports" value="reports" />} {/* 🔥 ASTA ADAUGI */}
-</Tabs>
+  <Box>
+    <Stack
+      direction="row"
+      spacing={1}
+      alignItems="center"
+      sx={{ mb: 2, flexWrap: "wrap" }}
+    >
+      <Tabs value={staffTab} onChange={(_, v) => setStaffTab(v)}>
+        <Tab label="Orders" value="orders" />
+        {isAdminRole && <Tab label="Products" value="products" />}
+        {isAdminRole && <Tab label="Reports" value="reports" />}
+      </Tabs>
 
+      {staffTab === "orders" && (
+        <FormControlLabel
+          sx={{ ml: "auto" }}
+          control={
+            <Checkbox
+              checked={showOnlyOpen}
+              onChange={(e) => setShowOnlyOpen(e.target.checked)}
+            />
+          }
+          label="Only open orders"
+        />
+      )}
+    </Stack>
 
+    <Divider sx={{ mb: 2 }} />
 
-{staffTab === "orders" && (
-<FormControlLabel
-sx={{ ml: "auto" }}
-control={<Checkbox
-checked={showOnlyOpen}
-onChange={(e) => setShowOnlyOpen(e.target.checked)} />}
-label="Only open orders" />
-)}
-</Stack>
+    {staffTab === "orders" && (
+      <Box>
+        <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
+          Orders (live)
+        </Typography>
 
-<Divider sx={{ mb: 2 }} />
+        {staffOrders.length === 0 && (
+          <Typography sx={{ opacity: 0.7 }}>No orders yet.</Typography>
+        )}
 
-{staffTab === "orders" && (
-<Box>
-<Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
-Orders (live)
-</Typography>
+        {staffOrders.map((order, index) => {
+          const prevOrder = index > 0 ? staffOrders[index - 1] : null;
+          const showDateSeparator =
+            index === 0 || prevOrder?.pickupDate !== order.pickupDate;
 
+          return (
+            <Box key={order.id}>
+              {showDateSeparator && (
+                <Box sx={{ mt: index === 0 ? 0 : 2.5, mb: 1 }}>
+                  <Chip
+                    label={getDaySectionLabel(order.pickupDate)}
+                    sx={{
+                      fontWeight: 1000,
+                      borderRadius: 999,
+                      px: 1,
+                      backgroundColor: "#111",
+                      color: "#fff"
+                    }}
+                  />
+                </Box>
+              )}
 
+              <Card
+                sx={{
+                  mb: 2,
+                  borderRadius: 3,
+                  p: isTablet ? 1 : 0,
+                  backgroundColor: lateWarningIds.includes(order.id)
+                    ? "#ffebee"
+                    : order.id === highlightedOrderId
+                    ? "#e8f5e9"
+                    : "background.paper",
+                  border: lateWarningIds.includes(order.id)
+                    ? "2px solid #d32f2f"
+                    : "1px solid rgba(0,0,0,0.12)",
+                  transition: "background-color 0.5s ease, border 0.3s ease",
+                  animation: lateWarningIds.includes(order.id)
+                    ? "latePulse 1.5s infinite"
+                    : "none",
+                  "@keyframes latePulse": {
+                    "0%": { boxShadow: "0 0 0 0 rgba(211,47,47,0.6)" },
+                    "70%": { boxShadow: "0 0 0 10px rgba(211,47,47,0)" },
+                    "100%": { boxShadow: "0 0 0 0 rgba(211,47,47,0)" }
+                  }
+                }}
+              >
+                <CardContent sx={{ p: isTablet ? 2.5 : 2 }}>
+                  <Stack
+                    direction="row"
+                    spacing={2}
+                    alignItems="flex-start"
+                    justifyContent="space-between"
+                    flexWrap="wrap"
+                  >
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography
+                        sx={{
+                          fontWeight: 900,
+                          fontSize: 18 * STAFF_FONT_SCALE,
+                          lineHeight: 1.1
+                        }}
+                      >
+                        {formatPickupDateShort(order.pickupDate)}
+                      </Typography>
 
-{staffOrders.length === 0 && (
-<Typography sx={{ opacity: 0.7 }}>No orders yet.</Typography>
-)}
+                      <Typography
+                        sx={{
+                          fontWeight: 900,
+                          fontSize: 20 * STAFF_FONT_SCALE,
+                          lineHeight: 1.1
+                        }}
+                      >
+                        {order.pickupTime}
+                      </Typography>
+                    </Box>
 
-{staffOrders.map((order) => (
-<Card
-key={order.id}
-sx={{
-mb: 2,
-borderRadius: 3,
-p: isTablet ? 1 : 0,
-backgroundColor: lateWarningIds.includes(order.id)
-? "#ffebee"
-: order.id === highlightedOrderId
-? "#e8f5e9"
-: "background.paper",
-border: lateWarningIds.includes(order.id)
-? "2px solid #d32f2f"
-: "1px solid rgba(0,0,0,0.12)",
-transition: "background-color 0.5s ease, border 0.3s ease",
-animation: lateWarningIds.includes(order.id)
-? "latePulse 1.5s infinite"
-: "none",
+                    <Chip
+                      icon={chipIcon(order.status)}
+                      label={order.status}
+                      color={chipColor(order.status)}
+                      variant="filled"
+                      sx={{
+                        fontWeight: 900,
+                        fontSize: 14 * STAFF_FONT_SCALE,
+                        px: 1.2,
+                        py: 2.2,
+                        borderRadius: 999
+                      }}
+                    />
 
-"@keyframes latePulse": {
-"0%": { boxShadow: "0 0 0 0 rgba(211,47,47,0.6)" },
-"70%": { boxShadow: "0 0 0 10px rgba(211,47,47,0)" },
-"100%": { boxShadow: "0 0 0 0 rgba(211,47,47,0)" }
-}
-}}
->
-<CardContent sx={{ p: isTablet ? 2.5 : 2 }}>
-<Stack
-direction="row"
-spacing={2}
-alignItems="flex-start"
-justifyContent="space-between"
-flexWrap="wrap"
->
-{/* LEFT: date + slot */}
-<Box sx={{ minWidth: 220 }}>
-<Typography sx={{ fontWeight: 900, fontSize: 18 * STAFF_FONT_SCALE, lineHeight: 1.1 }}>
-{formatPickupDateShort(order.pickupDate)}
-</Typography>
+                    <Box sx={{ textAlign: "right" }}>
+                      <Typography
+                        sx={{
+                          fontWeight: 1000,
+                          letterSpacing: 3,
+                          fontSize: 26 * STAFF_FONT_SCALE,
+                          lineHeight: 1
+                        }}
+                      >
+                        {order.code}
+                      </Typography>
+                      <Typography
+                        sx={{ opacity: 0.7, fontSize: 12 * STAFF_FONT_SCALE }}
+                      >
+                        Order Code
+                      </Typography>
+                    </Box>
+                  </Stack>
 
-<Typography sx={{ fontWeight: 900, fontSize: 20 * STAFF_FONT_SCALE, lineHeight: 1.1 }}>
-{order.pickupTime}
-</Typography>
-</Box>
+                  <Chip
+                    label={`Total: ${formatEUR(order.total)}`}
+                    sx={{
+                      mt: 1.2,
+                      fontWeight: 1000,
+                      fontSize: 14 * STAFF_FONT_SCALE,
+                      px: 1.2,
+                      py: 2,
+                      borderRadius: 999
+                    }}
+                  />
 
-{/* CENTER: status chip */}
-<Chip
-icon={chipIcon(order.status)}
-label={order.status}
-color={chipColor(order.status)}
-variant="filled"
-sx={{
-fontWeight: 900,
-fontSize: 14 * STAFF_FONT_SCALE,
-px: 1.2,
-py: 2.2,
-borderRadius: 999
-}} />
+                  <Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
+                  {(order.items || []).map((it, idx) => (
+                    <Typography
+                      key={idx}
+                      sx={{
+                        fontSize: 14 * STAFF_FONT_SCALE,
+                        fontWeight: 800,
+                        lineHeight: 1.35
+                      }}
+                    >
+                      - {it.displayName || it.name} ({formatEUR(it.price)})
+                    </Typography>
+                  ))}
 
-{/* RIGHT: order code BIG */}
-<Box sx={{ textAlign: "right" }}>
-<Typography
-sx={{
-fontWeight: 1000,
-letterSpacing: 3,
-fontSize: 26 * STAFF_FONT_SCALE,
-lineHeight: 1
-}}
->
-{order.code}
-</Typography>
-<Typography sx={{ opacity: 0.7, fontSize: 12 * STAFF_FONT_SCALE }}>
-Order Code
-</Typography>
-</Box>
-</Stack>
+                  <Box
+                    sx={{
+                      position: "sticky",
+                      top: 64,
+                      zIndex: 10,
+                      bgcolor: "background.paper",
+                      pb: 1,
+                      mb: 2
+                    }}
+                  >
+                    <Stack direction="row" spacing={1} sx={{ overflowX: "auto" }}>
+                      <Button
+                        variant="outlined"
+                        sx={{
+                          fontWeight: 900,
+                          fontSize: 13 * STAFF_FONT_SCALE,
+                          px: 2.2,
+                          py: 1.1
+                        }}
+                        onClick={() => setStatus(order.id, order.code, STATUS.NEW)}
+                      >
+                        New
+                      </Button>
 
-<Chip
-label={`Total: ${formatEUR(order.total)}`}
-sx={{
-mt: 1.2,
-fontWeight: 1000,
-fontSize: 14 * STAFF_FONT_SCALE,
-px: 1.2,
-py: 2,
-borderRadius: 999
-}} />
+                      <Button
+                        variant="outlined"
+                        sx={{
+                          fontWeight: 900,
+                          fontSize: 13 * STAFF_FONT_SCALE,
+                          px: 2.2,
+                          py: 1.1
+                        }}
+                        onClick={() =>
+                          setStatus(order.id, order.code, STATUS.IN_PROGRESS)
+                        }
+                      >
+                        In progress
+                      </Button>
 
-<Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
-{(order.items || []).map((it, idx) => (
-<Typography
-key={idx}
-sx={{ fontSize: 14 * STAFF_FONT_SCALE, fontWeight: 800, lineHeight: 1.35 }}
->
-- {formatCartItemDisplay(it)} ({formatEUR(it.price)})
-</Typography>
-))}
+                      <Button
+                        variant="contained"
+                        sx={{
+                          fontWeight: 900,
+                          fontSize: 13 * STAFF_FONT_SCALE,
+                          px: 2.2,
+                          py: 1.1
+                        }}
+                        onClick={async () => {
+                          if (
+                            !window.confirm(
+                              "Print final receipt and mark this order as READY?"
+                            )
+                          ) {
+                            return;
+                          }
 
-<Box
-sx={{
-position: "sticky",
-top: 64,
-zIndex: 10,
-bgcolor: "background.paper",
-pb: 1,
-mb: 2
-}}
->
-<Stack direction="row" spacing={1} sx={{ overflowX: "auto" }}>
+                          try {
+                            await printOrderSilent(order);
+                            await setStatus(order.id, order.code, STATUS.READY);
+                            setSnack({
+                              open: true,
+                              msg: "Printed and marked READY"
+                            });
+                          } catch (err) {
+                            console.error("Print error:", err);
+                            setSnack({
+                              open: true,
+                              msg: "Print failed - order NOT marked READY"
+                            });
+                          }
+                        }}
+                      >
+                        Ready
+                      </Button>
+                    </Stack>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Box>
+          );
+        })}
+      </Box>
+    )}
 
-<Button
-variant="outlined"
-sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-onClick={() => setStatus(order.id, order.code, STATUS.NEW)}
->
-New
-</Button>
+    {staffTab === "products" && isAdminRole && (
+      <Box>
+        <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
+          Products (Admin)
+        </Typography>
 
-<Button
-variant="outlined"
-sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-onClick={() => setStatus(order.id, order.code, STATUS.IN_PROGRESS)}
->
-In progress
-</Button>
+        <Card sx={{ borderRadius: 3, mb: 2 }}>
+          <CardContent>
+            <Typography sx={{ fontWeight: 800, mb: 1 }}>Add product</Typography>
 
-<Button
-variant="contained"
-sx={{ fontWeight: 900, fontSize: 13 * STAFF_FONT_SCALE, px: 2.2, py: 1.1 }}
-onClick={async () => {
-  if (!window.confirm("Print final receipt and mark this order as READY?")) return;
+            <Box
+              component="form"
+              onSubmit={addProduct}
+              sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}
+            >
+              <TextField
+                label="Name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                size="small"
+              />
+              <TextField
+                select
+                label="Category"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                size="small"
+                sx={{ width: 160 }}
+              >
+                <MenuItem value="rolls">ROLLS</MenuItem>
+                <MenuItem value="sides">SIDES</MenuItem>
+                <MenuItem value="drinks">DRINKS</MenuItem>
+              </TextField>
+              <TextField
+                label="Price"
+                value={newPrice}
+                onChange={(e) => setNewPrice(e.target.value)}
+                size="small"
+                sx={{ width: 140 }}
+              />
+              <Button type="submit" variant="contained">
+                Add
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
 
-  try {
-    await printOrderSilent(order);
-    await setStatus(order.id, order.code, STATUS.READY);
-    setSnack({ open: true, msg: "Printed and marked READY" });
-  } catch (err) {
-    console.error("Print error:", err);
-    setSnack({ open: true, msg: "Print failed - order NOT marked READY" });
-  }
-}}
->
-Ready
-</Button>
-</Stack>
-</Box>
-</CardContent>
-</Card>
-))}
-</Box>
-)}
+        {productsDb.length === 0 && (
+          <Typography sx={{ opacity: 0.7 }}>No products yet.</Typography>
+        )}
 
-{staffTab === "products" && isAdminRole && (
-<Box>
-<Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
-Products (Admin)
-</Typography>
+        {productsDb.map((p) => (
+          <Card key={p.id} sx={{ mb: 2, borderRadius: 3 }}>
+            <CardContent>
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                <Typography sx={{ fontWeight: 800 }}>{p.name}</Typography>
+                <Chip
+                  size="small"
+                  label={p.active === false ? "Out of stock" : "Available"}
+                  color={p.active === false ? "default" : "success"}
+                  variant={p.active === false ? "outlined" : "filled"}
+                />
+              </Stack>
 
-<Card sx={{ borderRadius: 3, mb: 2 }}>
-<CardContent>
-<Typography sx={{ fontWeight: 800, mb: 1 }}>Add product</Typography>
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                sx={{ mt: 1 }}
+                flexWrap="wrap"
+              >
+                <Typography variant="body2">Price:</Typography>
+                <TextField
+                  defaultValue={p.price}
+                  size="small"
+                  sx={{ width: 140 }}
+                  onBlur={(e) => updateProductPrice(p, e.target.value)}
+                  disabled={!isAdminRole}
+                />
+                <TextField
+                  select
+                  label="Category"
+                  size="small"
+                  value={getCategory(p)}
+                  sx={{ width: 160 }}
+                  onChange={(e) => updateProductCategory(p, e.target.value)}
+                  disabled={!isAdminRole}
+                >
+                  <MenuItem value="rolls">ROLLS</MenuItem>
+                  <MenuItem value="sides">SIDES</MenuItem>
+                  <MenuItem value="drinks">DRINKS</MenuItem>
+                </TextField>
 
-<Box
-component="form"
-onSubmit={addProduct}
-sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}
->
-<TextField
-label="Name"
-value={newName}
-onChange={(e) => setNewName(e.target.value)}
-size="small" />
-<TextField
-select
-label="Category"
-value={newCategory}
-onChange={(e) => setNewCategory(e.target.value)}
-size="small"
-sx={{ width: 160 }}
->
-<MenuItem value="rolls">ROLLS</MenuItem>
-<MenuItem value="sides">SIDES</MenuItem>
-<MenuItem value="drinks">DRINKS</MenuItem>
-</TextField>
-<TextField
-label="Price"
-value={newPrice}
-onChange={(e) => setNewPrice(e.target.value)}
-size="small"
-sx={{ width: 140 }} />
-<Button type="submit" variant="contained">
-Add
-</Button>
-</Box>
-</CardContent>
-</Card>
+                <Button
+                  variant={p.active === false ? "contained" : "outlined"}
+                  color={p.active === false ? "success" : "warning"}
+                  onClick={() => toggleProductActive(p)}
+                  disabled={!isAdminRole}
+                  sx={{ fontWeight: 900 }}
+                >
+                  {p.active === false ? "Back in stock" : "Out of stock"}
+                </Button>
 
-{productsDb.length === 0 && (
-<Typography sx={{ opacity: 0.7 }}>No products yet.</Typography>
-)}
+                {isAdminRole && (
+                  <Button variant="outlined" onClick={() => openEditConfig(p)}>
+                    Edit config
+                  </Button>
+                )}
 
-{productsDb.map((p) => (
-<Card key={p.id} sx={{ mb: 2, borderRadius: 3 }}>
-<CardContent>
-<Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-<Typography sx={{ fontWeight: 800 }}>{p.name}</Typography>
-<Chip
-size="small"
-label={p.active === false ? "Out of stock" : "Available"}
-color={p.active === false ? "default" : "success"}
-variant={p.active === false ? "outlined" : "filled"} />
-</Stack>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={() => removeProduct(p)}
+                  disabled={!isAdminRole}
+                >
+                  Delete
+                </Button>
+              </Stack>
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
+    )}
 
-<Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }} flexWrap="wrap">
-<Typography variant="body2">Price:</Typography>
-<TextField
-defaultValue={p.price}
-size="small"
-sx={{ width: 140 }}
-onBlur={(e) => updateProductPrice(p, e.target.value)}
-disabled={!isAdminRole} />
-<TextField
-select
-label="Category"
-size="small"
-value={getCategory(p)}
-sx={{ width: 160 }}
-onChange={(e) => updateProductCategory(p, e.target.value)}
-disabled={!isAdminRole}
->
-<MenuItem value="rolls">ROLLS</MenuItem>
-<MenuItem value="sides">SIDES</MenuItem>
-<MenuItem value="drinks">DRINKS</MenuItem>
-</TextField>
-<Button
-variant={p.active === false ? "contained" : "outlined"}
-color={p.active === false ? "success" : "warning"}
-onClick={() => toggleProductActive(p)}
-disabled={!isAdminRole}
-sx={{ fontWeight: 900 }}
->
-{p.active === false ? "Back in stock" : "Out of stock"}
-</Button>
-
-<Paper sx={{ p: isTablet ? 2.5 : 1.5, borderRadius: 3 }}></Paper>
-{isAdminRole && (
-<Button variant="outlined" onClick={() => openEditConfig(p)}>
-Edit config
-</Button>
-)}
-
-<Button
-variant="outlined"
-color="error"
-onClick={() => removeProduct(p)}
-disabled={!isAdminRole}
->
-Delete
-</Button>
-</Stack>
-</CardContent>
-</Card>
-))}
-</Box>
-)}
-
-{staffTab === "reports" && isAdminRole && (
-<ReportsPanel orders={ordersAll} />
-)}
-</Box>
+    {staffTab === "reports" && isAdminRole && (
+      <ReportsPanel orders={ordersAll} />
+    )}
+  </Box>
 )}
 </Container>
-
-
 
 
 {/* EDIT CONFIG DIALOG */}
