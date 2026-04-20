@@ -849,9 +849,7 @@ const [cfgSaladsEnabled, setCfgSaladsEnabled] = useState(false);
 const [cfgSaladsIncluded, setCfgSaladsIncluded] = useState("2");
 const [cfgSaladsExtraPrice, setCfgSaladsExtraPrice] = useState("0.7");
 const [cfgSaladsItemsText, setCfgSaladsItemsText] = useState("");
-
-// options (super simplu): scrii una pe linie: key|label|type|required|item1,item2,item3
-const [cfgOptionsText, setCfgOptionsText] = useState("");
+const [cfgOptionGroups, setCfgOptionGroups] = useState([]);
 
 function openConfigurator(product) {
 setConfigProduct(product);
@@ -1132,39 +1130,84 @@ setCfgSaladsExtraPrice(String(salads.extraPrice ?? 0.7));
 setCfgSaladsItemsText((salads.items || []).join("\n"));
 
 const opts = Array.isArray(p?.config?.options) ? p.config.options : [];
-// format text: key|label|single|true|Butter,Hot
-const lines = opts.map((o) => {
-const items = Array.isArray(o.items) ? o.items.join(",") : "";
-return `${o.key}|${o.label}|${o.type || "single"}|${o.required ? "true" : "false"}|${items}`;
-});
-setCfgOptionsText(lines.join("\n"));
+setCfgOptionGroups(
+  opts.length ? optionsToEditorGroups(opts) : []
+);
 
 setEditOpen(true);
 }
 
-function parseOptionsText(text) {
-// fiecare linie: key|label|type|required|item1,item2,item3
-return text
-.split("\n")
-.map((l) => l.trim())
-.filter(Boolean)
-.map((line) => {
-const [key, label, type, required, itemsStr] = line.split("|").map((x) => (x || "").trim());
-const items = (itemsStr || "")
-.split(",")
-.map((x) => x.trim())
-.filter(Boolean);
-
-return {
-key,
-label: label || key,
-type: type === "multi" ? "multi" : "single",
-required: required === "true",
-items
-};
-})
-.filter((o) => o.key); // doar cele valide
+function makeEmptyOptionGroup() {
+  return {
+    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    key: "",
+    label: "",
+    type: "single",
+    required: false,
+    itemsText: ""
+  };
 }
+
+function optionsToEditorGroups(options) {
+  return (Array.isArray(options) ? options : []).map((o, idx) => ({
+    id: `${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 8)}`,
+    key: o.key || "",
+    label: o.label || "",
+    type: o.type === "multi" ? "multi" : "single",
+    required: !!o.required,
+    itemsText: Array.isArray(o.items) ? o.items.join("\n") : ""
+  }));
+}
+
+function editorGroupsToOptions(groups) {
+  return (Array.isArray(groups) ? groups : [])
+    .map((g) => ({
+      key: String(g.key || "").trim(),
+      label: String(g.label || "").trim() || String(g.key || "").trim(),
+      type: g.type === "multi" ? "multi" : "single",
+      required: !!g.required,
+      items: String(g.itemsText || "")
+        .split("\n")
+        .map((x) => x.trim())
+        .filter(Boolean)
+    }))
+    .filter((o) => o.key);
+}
+
+function updateOptionGroup(id, patch) {
+  setCfgOptionGroups((prev) =>
+    prev.map((g) => (g.id === id ? { ...g, ...patch } : g))
+  );
+}
+
+function addOptionGroup() {
+  setCfgOptionGroups((prev) => [...prev, makeEmptyOptionGroup()]);
+}
+
+function removeOptionGroup(id) {
+  setCfgOptionGroups((prev) => prev.filter((g) => g.id !== id));
+}
+
+function moveOptionGroupUp(id) {
+  setCfgOptionGroups((prev) => {
+    const idx = prev.findIndex((g) => g.id === id);
+    if (idx <= 0) return prev;
+    const next = [...prev];
+    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+    return next;
+  });
+}
+
+function moveOptionGroupDown(id) {
+  setCfgOptionGroups((prev) => {
+    const idx = prev.findIndex((g) => g.id === id);
+    if (idx === -1 || idx >= prev.length - 1) return prev;
+    const next = [...prev];
+    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+    return next;
+  });
+}
+
 
 async function saveEditConfig() {
 if (!editProduct) return;
@@ -1184,7 +1227,7 @@ included: Number.isFinite(included) ? included : 0,
 extraPrice: Number.isFinite(extraPrice) ? extraPrice : 0,
 items: saladsItems
 },
-options: parseOptionsText(cfgOptionsText)
+options: editorGroupsToOptions(cfgOptionGroups)
 };
 
 await updateDoc(doc(db, "products", editProduct.id), { config });
@@ -2489,14 +2532,115 @@ fullWidth
 
 <Divider />
 
-<TextField
-label="Options (one per line): key|label|type(single/multi)|required(true/false)|items(comma)"
-value={cfgOptionsText}
-onChange={(e) => setCfgOptionsText(e.target.value)}
-multiline
-minRows={6}
-fullWidth
-/>
+<Box sx={{ mt: 2 }}>
+  <Typography sx={{ fontWeight: 800, mb: 1.5 }}>
+    Option groups
+  </Typography>
+
+  <Stack spacing={1.5}>
+    {cfgOptionGroups.map((group, index) => (
+      <Paper key={group.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+        <Stack spacing={1.25}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography sx={{ fontWeight: 800 }}>
+              Group #{index + 1}
+            </Typography>
+
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => moveOptionGroupUp(group.id)}
+                disabled={index === 0}
+              >
+                ↑
+              </Button>
+
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => moveOptionGroupDown(group.id)}
+                disabled={index === cfgOptionGroups.length - 1}
+              >
+                ↓
+              </Button>
+
+              <Button
+                size="small"
+                color="error"
+                variant="outlined"
+                onClick={() => removeOptionGroup(group.id)}
+              >
+                Remove
+              </Button>
+            </Stack>
+          </Stack>
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+            <TextField
+              label="Key"
+              fullWidth
+              value={group.key}
+              onChange={(e) => updateOptionGroup(group.id, { key: e.target.value })}
+              placeholder="chicken"
+            />
+
+            <TextField
+              label="Label"
+              fullWidth
+              value={group.label}
+              onChange={(e) => updateOptionGroup(group.id, { label: e.target.value })}
+              placeholder="Chicken"
+            />
+          </Stack>
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+            <TextField
+              select
+              label="Type"
+              value={group.type}
+              onChange={(e) => updateOptionGroup(group.id, { type: e.target.value })}
+              sx={{ minWidth: 160 }}
+            >
+              <MenuItem value="single">single</MenuItem>
+              <MenuItem value="multi">multi</MenuItem>
+            </TextField>
+
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={group.required}
+                  onChange={(e) =>
+                    updateOptionGroup(group.id, { required: e.target.checked })
+                  }
+                />
+              }
+              label="Required"
+            />
+          </Stack>
+
+          <TextField
+            label="Items list (one per line)"
+            multiline
+            minRows={4}
+            fullWidth
+            value={group.itemsText}
+            onChange={(e) => updateOptionGroup(group.id, { itemsText: e.target.value })}
+            placeholder={`Butter\nHot (Spicy)`}
+          />
+        </Stack>
+      </Paper>
+    ))}
+
+    <Button
+      variant="outlined"
+      onClick={addOptionGroup}
+      sx={{ alignSelf: "flex-start", fontWeight: 800 }}
+    >
+      + Add option group
+    </Button>
+  </Stack>
+</Box>
 </Stack>
 </DialogContent>
 
