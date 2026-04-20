@@ -1386,41 +1386,18 @@ function wrapText(text, width = 24) {
   return lines;
 }
 
-function cleanOptionText(text) {
-  return String(text || "")
-    .replace(/[↑¢•●▪■►▶]/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/\s*,\s*/g, ", ")
-    .trim();
+function formatReceiptSelectionLines(label, value, valueWidth = 24) {
+  const text = Array.isArray(value) ? value.join(", ") : String(value || "").trim();
+  if (!text) return [];
+
+  const lines = wrapText(text, valueWidth);
+  const prefix = `  ${String(label || "").toUpperCase()}: `;
+  const indent = " ".repeat(prefix.length);
+
+  return lines.map((line, idx) => (idx === 0 ? prefix + line : indent + line));
 }
 
-function extractField(details, label, nextLabels = []) {
-  const labelRegex = new RegExp(`${label}:\\s*`, "i");
-  const labelMatch = labelRegex.exec(details);
-  if (!labelMatch) return "";
 
-  const startIndex = labelMatch.index + labelMatch[0].length;
-  let endIndex = details.length;
-
-  nextLabels.forEach((nextLabel) => {
-    const nextRegex = new RegExp(`${nextLabel}:\\s*`, "i");
-    const sliced = details.slice(startIndex);
-    const nextMatch = nextRegex.exec(sliced);
-
-    if (nextMatch) {
-      const candidateEnd = startIndex + nextMatch.index;
-      if (candidateEnd < endIndex) {
-        endIndex = candidateEnd;
-      }
-    }
-  });
-
-  return details
-    .slice(startIndex, endIndex)
-    .trim()
-    .replace(/-+$/g, "")
-    .trim();
-}
 
 function buildReceiptText(order) {
   const lines = [];
@@ -1430,54 +1407,30 @@ function buildReceiptText(order) {
   lines.push("");
 
   (order.items || []).forEach((it) => {
-    const baseName = String(it.name || it.displayName || "Item").trim();
+    const baseName = String(it.name || "Item").trim();
     const price = Number(it.price || 0).toFixed(2);
 
     lines.push(`[[BOLD]]${formatLine(baseName, price, RECEIPT_WIDTH)}[[/BOLD]]`);
 
-    const displayName = cleanOptionText(it.displayName || "");
-    const plainName = cleanOptionText(it.name || "");
+    const selections = it.selections || {};
+    const selectionLabels = it.selectionLabels || {};
 
-    let details = displayName;
-    if (plainName && details.startsWith(plainName)) {
-      details = details.slice(plainName.length).trim();
-    }
+    Object.entries(selections).forEach(([key, value]) => {
+      const hasValue = Array.isArray(value) ? value.length > 0 : !!value;
+      if (!hasValue) return;
 
-    details = details.replace(/^\(|\)$/g, "").trim();
-
-    const chicken = cleanOptionText(
-      extractField(details, "Chicken", ["Sauce", "Salads"])
-    );
-    const sauce = cleanOptionText(
-      extractField(details, "Sauce", ["Salads"])
-    );
-    const salads = cleanOptionText(
-      extractField(details, "Salads", [])
-    );
-
-    if (chicken) {
-      wrapText(chicken, 24).forEach((line, idx) => {
-        lines.push(idx === 0 ? `  CHICKEN: ${line}` : `           ${line}`);
-      });
-    }
-
-    if (sauce) {
-      wrapText(sauce, 25).forEach((line, idx) => {
-        lines.push(idx === 0 ? `  SAUCE: ${line}` : `         ${line}`);
-      });
-    }
-
-    if (salads) {
-      wrapText(salads, 24).forEach((line, idx) => {
-        lines.push(idx === 0 ? `  SALADS: ${line}` : `          ${line}`);
-      });
-    }
+      const label = selectionLabels[key] || key;
+      const selectionLines = formatReceiptSelectionLines(label, value, 24);
+      selectionLines.forEach((line) => lines.push(line));
+    });
 
     lines.push("");
   });
 
   lines.push("------------------------------------");
-  lines.push(`[[BOLD]]${formatLine("TOTAL", Number(order.total || 0).toFixed(2), RECEIPT_WIDTH)}[[/BOLD]]`);
+  lines.push(
+    `[[BOLD]]${formatLine("TOTAL", Number(order.total || 0).toFixed(2), RECEIPT_WIDTH)}[[/BOLD]]`
+  );
 
   return lines.join("\n");
 }
