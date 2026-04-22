@@ -226,17 +226,93 @@ const closeMinutes = 23 * 60; // 23:00
 return minutesNow >= openMinutes && minutesNow < closeMinutes;
 }
 
-function buildStructuredCartItem(product, customSelections, selectedSalads, configTotalPrice) {
-  const selections = { ...customSelections };
-  const selectionLabels = {};
 
-  (product?.config?.options || []).forEach((opt) => {
+
+export default function App() {
+// ===== MODE =====
+const params = new URLSearchParams(window.location.search);
+const mode = params.get("mode") || "client";
+const isStaff = mode === "staff";
+const [lastPublicStatus, setLastPublicStatus] = useState("");
+const [cartOpen, setCartOpen] = useState(false);
+const [publicOrder, setPublicOrder] = useState(null);
+const [isOpen, setIsOpen] = useState(isWithinWorkingHours());
+const isTablet = useMediaQuery("(max-width: 1024px)");
+const [highlightedOrderId, setHighlightedOrderId] = useState(null);
+const [historyOpen, setHistoryOpen] = useState(false);
+const [historySelected, setHistorySelected] = useState(null);
+const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+const [lateWarningIds, setLateWarningIds] = useState([]);
+const warnedLateOrdersRef = useRef(new Set());
+const ALLERGENS = [
+  { key: "gluten", label: "Gluten" },
+  { key: "crustaceans", label: "Crustaceans" },
+  { key: "eggs", label: "Eggs" },
+  { key: "fish", label: "Fish" },
+  { key: "peanuts", label: "Peanuts" },
+  { key: "soy", label: "Soy" },
+  { key: "milk", label: "Milk" },
+  { key: "nuts", label: "Nuts" },
+  { key: "celery", label: "Celery" },
+  { key: "mustard", label: "Mustard" },
+  { key: "sesame", label: "Sesame" },
+  { key: "sulphites", label: "Sulphites" },
+  { key: "lupin", label: "Lupin" },
+  { key: "molluscs", label: "Molluscs" }
+];
+const [cfgSaladRows, setCfgSaladRows] = useState([]);
+
+function buildStructuredCartItem(product, customSelections, selectedSalads, configTotalPrice) {
+  const selections = {};
+  const selectionLabels = {};
+  const selectionAllergens = {};
+
+  const optionGroups = Array.isArray(product?.config?.options)
+    ? product.config.options
+    : [];
+
+  optionGroups.forEach((opt) => {
+    const normalizedItems = normalizeConfigItems(opt.items || []);
+    const selectedValue = customSelections[opt.key];
+
     selectionLabels[opt.key] = opt.label || opt.key;
+
+    if (opt.type === "multi") {
+      const selectedValues = Array.isArray(selectedValue) ? selectedValue : [];
+
+      const selectedItems = selectedValues
+        .map((value) => normalizedItems.find((item) => item.value === value))
+        .filter(Boolean);
+
+      selections[opt.key] = selectedItems.map((item) => item.label);
+
+      selectionAllergens[opt.key] = [
+        ...new Set(selectedItems.flatMap((item) => item.allergens || []))
+      ];
+    } else {
+      if (selectedValue) {
+        const match = normalizedItems.find((item) => item.value === selectedValue);
+
+        if (match) {
+          selections[opt.key] = match.label;
+          selectionAllergens[opt.key] = [...new Set(match.allergens || [])];
+        }
+      }
+    }
   });
 
   if (product?.config?.salads?.enabled && selectedSalads.length > 0) {
-    selections.salads = [...selectedSalads];
+    const normalizedSalads = normalizeConfigItems(product?.config?.salads?.items || []);
+
+    const selectedSaladItems = selectedSalads
+      .map((value) => normalizedSalads.find((item) => item.value === value))
+      .filter(Boolean);
+
+    selections.salads = selectedSaladItems.map((item) => item.label);
     selectionLabels.salads = "Salads";
+    selectionAllergens.salads = [
+      ...new Set(selectedSaladItems.flatMap((item) => item.allergens || []))
+    ];
   }
 
   return {
@@ -244,7 +320,8 @@ function buildStructuredCartItem(product, customSelections, selectedSalads, conf
     name: product.name,
     price: Number(configTotalPrice.toFixed(2)),
     selections,
-    selectionLabels
+    selectionLabels,
+    selectionAllergens
   };
 }
 
@@ -266,22 +343,22 @@ function formatCartItemDisplay(item) {
   return parts.length ? `${item.name} (${parts.join(" • ")})` : item.name;
 }
 
-export default function App() {
-// ===== MODE =====
-const params = new URLSearchParams(window.location.search);
-const mode = params.get("mode") || "client";
-const isStaff = mode === "staff";
-const [lastPublicStatus, setLastPublicStatus] = useState("");
-const [cartOpen, setCartOpen] = useState(false);
-const [publicOrder, setPublicOrder] = useState(null);
-const [isOpen, setIsOpen] = useState(isWithinWorkingHours());
-const isTablet = useMediaQuery("(max-width: 1024px)");
-const [highlightedOrderId, setHighlightedOrderId] = useState(null);
-const [historyOpen, setHistoryOpen] = useState(false);
-const [historySelected, setHistorySelected] = useState(null);
-const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
-const [lateWarningIds, setLateWarningIds] = useState([]);
-const warnedLateOrdersRef = useRef(new Set());
+function getCartItemAllergenLabels(item) {
+  const grouped = item?.selectionAllergens || {};
+
+  const allKeys = Object.values(grouped).flatMap((arr) =>
+    Array.isArray(arr) ? arr : []
+  );
+
+  const uniqueKeys = [...new Set(allKeys)];
+
+  return uniqueKeys
+    .map((key) => ALLERGENS.find((a) => a.key === key)?.label || key)
+    .filter(Boolean);
+}
+
+
+
 
 
 const STAFF_FONT_SCALE = isTablet ? 1.35 : 1; // ajustează 1.25 / 1.4 după gust
@@ -860,7 +937,7 @@ const [editProduct, setEditProduct] = useState(null);
 const [cfgSaladsEnabled, setCfgSaladsEnabled] = useState(false);
 const [cfgSaladsIncluded, setCfgSaladsIncluded] = useState("2");
 const [cfgSaladsExtraPrice, setCfgSaladsExtraPrice] = useState("0.7");
-const [cfgSaladsItemsText, setCfgSaladsItemsText] = useState("");
+
 const [cfgOptionGroups, setCfgOptionGroups] = useState([]);
 
 function openConfigurator(product) {
@@ -1034,13 +1111,14 @@ const entry = {
   pickupDate,
   pickupTime: pickupSlot.label,
   total: Number(total.toFixed(2)),
-  items: cart.map((it) => ({
-    productId: it.productId || null,
-    name: it.name,
-    price: Number(it.price || 0),
-    selections: it.selections || {},
-    selectionLabels: it.selectionLabels || {}
-  })),
+items: cart.map((it) => ({
+  productId: it.productId || null,
+  name: it.name,
+  price: Number(it.price || 0),
+  selections: it.selections || {},
+  selectionLabels: it.selectionLabels || {},
+  selectionAllergens: it.selectionAllergens || {}
+})),
   createdAt: Date.now()
 };
 
@@ -1133,20 +1211,187 @@ if (!window.confirm(`Stergi produsul "${product.name}"?`)) return;
 await deleteDoc(doc(db, "products", product.id));
 }
 function openEditConfig(p) {
-setEditProduct(p);
+  setEditProduct(p);
 
-const salads = p?.config?.salads || {};
-setCfgSaladsEnabled(!!salads.enabled);
-setCfgSaladsIncluded(String(salads.included ?? 2));
-setCfgSaladsExtraPrice(String(salads.extraPrice ?? 0.7));
-setCfgSaladsItemsText((salads.items || []).join("\n"));
+  const salads = p?.config?.salads || {};
+  setCfgSaladsEnabled(!!salads.enabled);
+  setCfgSaladsIncluded(String(salads.included ?? 2));
+  setCfgSaladsExtraPrice(String(salads.extraPrice ?? 0.7));
 
-const opts = Array.isArray(p?.config?.options) ? p.config.options : [];
-setCfgOptionGroups(
-  opts.length ? optionsToEditorGroups(opts) : []
-);
+  const normalizedSalads = normalizeConfigItems(salads.items || []);
+setCfgSaladRows(itemsToEditorRows(normalizedSalads));
 
-setEditOpen(true);
+  const opts = Array.isArray(p?.config?.options) ? p.config.options : [];
+  setCfgOptionGroups(
+    opts.length ? optionsToEditorGroups(opts) : []
+  );
+
+  setEditOpen(true);
+}
+
+function slugifyItemValue(text) {
+  return String(text || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[()]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+}
+
+function normalizeConfigItem(item) {
+  if (typeof item === "string") {
+    const label = item.trim();
+    return {
+      value: slugifyItemValue(label),
+      label,
+      allergens: []
+    };
+  }
+
+  const label = String(item?.label || item?.value || "").trim();
+  const value = String(item?.value || slugifyItemValue(label)).trim();
+  const allergens = Array.isArray(item?.allergens)
+    ? item.allergens.map((x) => String(x).trim()).filter(Boolean)
+    : [];
+
+  return {
+    value,
+    label,
+    allergens
+  };
+}
+
+function normalizeConfigItems(items) {
+  return (Array.isArray(items) ? items : [])
+    .map(normalizeConfigItem)
+    .filter((item) => item.label);
+}
+
+function makeEditorItemRow(item = {}) {
+  const normalized = normalizeConfigItem(item);
+
+  return {
+    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    value: normalized.value,
+    label: normalized.label,
+    allergens: normalized.allergens || []
+  };
+}
+
+function itemsToEditorRows(items) {
+  return normalizeConfigItems(items).map((item) => makeEditorItemRow(item));
+}
+
+function editorRowsToItems(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const label = String(row.label || "").trim();
+      const value = String(row.value || slugifyItemValue(label)).trim();
+      const allergens = Array.isArray(row.allergens)
+        ? row.allergens.map((x) => String(x).trim()).filter(Boolean)
+        : [];
+
+      return {
+        value,
+        label,
+        allergens
+      };
+    })
+    .filter((item) => item.label);
+}
+
+function updateSaladRow(id, patch) {
+  setCfgSaladRows((prev) =>
+    prev.map((row) => (row.id === id ? { ...row, ...patch } : row))
+  );
+}
+
+function addSaladRow() {
+  setCfgSaladRows((prev) => [...prev, makeEditorItemRow()]);
+}
+
+function removeSaladRow(id) {
+  setCfgSaladRows((prev) => prev.filter((row) => row.id !== id));
+}
+
+function toggleSaladRowAllergen(id, allergenKey) {
+  setCfgSaladRows((prev) =>
+    prev.map((row) => {
+      if (row.id !== id) return row;
+
+      const exists = row.allergens.includes(allergenKey);
+      return {
+        ...row,
+        allergens: exists
+          ? row.allergens.filter((x) => x !== allergenKey)
+          : [...row.allergens, allergenKey]
+      };
+    })
+  );
+}
+
+function updateOptionItemRow(groupId, rowId, patch) {
+  setCfgOptionGroups((prev) =>
+    prev.map((group) => {
+      if (group.id !== groupId) return group;
+
+      const rows = Array.isArray(group.itemRows) ? group.itemRows : [];
+      return {
+        ...group,
+        itemRows: rows.map((row) => (row.id === rowId ? { ...row, ...patch } : row))
+      };
+    })
+  );
+}
+
+function addOptionItemRow(groupId) {
+  setCfgOptionGroups((prev) =>
+    prev.map((group) => {
+      if (group.id !== groupId) return group;
+
+      const rows = Array.isArray(group.itemRows) ? group.itemRows : [];
+      return {
+        ...group,
+        itemRows: [...rows, makeEditorItemRow()]
+      };
+    })
+  );
+}
+
+function removeOptionItemRow(groupId, rowId) {
+  setCfgOptionGroups((prev) =>
+    prev.map((group) => {
+      if (group.id !== groupId) return group;
+
+      return {
+        ...group,
+        itemRows: (group.itemRows || []).filter((row) => row.id !== rowId)
+      };
+    })
+  );
+}
+
+function toggleOptionItemAllergen(groupId, rowId, allergenKey) {
+  setCfgOptionGroups((prev) =>
+    prev.map((group) => {
+      if (group.id !== groupId) return group;
+
+      return {
+        ...group,
+        itemRows: (group.itemRows || []).map((row) => {
+          if (row.id !== rowId) return row;
+
+          const exists = row.allergens.includes(allergenKey);
+          return {
+            ...row,
+            allergens: exists
+              ? row.allergens.filter((x) => x !== allergenKey)
+              : [...row.allergens, allergenKey]
+          };
+        })
+      };
+    })
+  );
 }
 
 function makeEmptyOptionGroup() {
@@ -1156,19 +1401,23 @@ function makeEmptyOptionGroup() {
     label: "",
     type: "single",
     required: false,
-    itemsText: ""
+    itemRows: []
   };
 }
 
 function optionsToEditorGroups(options) {
-  return (Array.isArray(options) ? options : []).map((o, idx) => ({
-    id: `${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 8)}`,
-    key: o.key || "",
-    label: o.label || "",
-    type: o.type === "multi" ? "multi" : "single",
-    required: !!o.required,
-    itemsText: Array.isArray(o.items) ? o.items.join("\n") : ""
-  }));
+  return (Array.isArray(options) ? options : []).map((o, idx) => {
+    const normalizedItems = normalizeConfigItems(o.items || []);
+
+    return {
+      id: `${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 8)}`,
+      key: o.key || "",
+      label: o.label || "",
+      type: o.type === "multi" ? "multi" : "single",
+      required: !!o.required,
+      itemRows: itemsToEditorRows(normalizedItems)
+    };
+  });
 }
 
 function editorGroupsToOptions(groups) {
@@ -1178,10 +1427,7 @@ function editorGroupsToOptions(groups) {
       label: String(g.label || "").trim() || String(g.key || "").trim(),
       type: g.type === "multi" ? "multi" : "single",
       required: !!g.required,
-      items: String(g.itemsText || "")
-        .split("\n")
-        .map((x) => x.trim())
-        .filter(Boolean)
+      items: editorRowsToItems(g.itemRows || [])
     }))
     .filter((o) => o.key);
 }
@@ -1220,14 +1466,37 @@ function moveOptionGroupDown(id) {
   });
 }
 
+function getAllergenLabels(keys) {
+  return (Array.isArray(keys) ? keys : [])
+    .map((key) => ALLERGENS.find((a) => a.key === key)?.label || key)
+    .filter(Boolean);
+}
+
+function renderAllergenChips(allergenKeys) {
+  const labels = getAllergenLabels(allergenKeys);
+
+  if (labels.length === 0) return null;
+
+  return (
+    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
+      {labels.map((label) => (
+        <Chip
+          key={label}
+          label={label}
+          size="small"
+          color="warning"
+          variant="outlined"
+        />
+      ))}
+    </Stack>
+  );
+}
+
 
 async function saveEditConfig() {
 if (!editProduct) return;
 
-const saladsItems = cfgSaladsItemsText
-.split("\n")
-.map((x) => x.trim())
-.filter(Boolean);
+const saladsItems = editorRowsToItems(cfgSaladRows);
 
 const included = Number(cfgSaladsIncluded);
 const extraPrice = Number(cfgSaladsExtraPrice);
@@ -1315,7 +1584,11 @@ const saladsIncluded = Number(configProduct?.config?.salads?.included || 0);
 const extraPrice = Number(configProduct?.config?.salads?.extraPrice || 0);
 const extraCount = saladsEnabled ? Math.max(0, selectedSalads.length - saladsIncluded) : 0;
 
-const cfgOpts = configProduct?.config?.options || [];
+
+const cfgOpts = (configProduct?.config?.options || []).map((opt) => ({
+  ...opt,
+  items: normalizeConfigItems(opt.items || [])
+}));
 const missingRequired = cfgOpts.some((o) => {
 if (!o.required) return false;
 const v = customSelections[o.key];
@@ -1782,7 +2055,8 @@ const itemsToAdd = (o.items || []).map((it) => ({
   name: it.name,
   price: Number(it.price || 0),
   selections: it.selections || {},
-  selectionLabels: it.selectionLabels || {}
+  selectionLabels: it.selectionLabels || {},
+  selectionAllergens: it.selectionAllergens || {}
 }));
 
 setCart((prev) => [...prev, ...itemsToAdd]);
@@ -2013,10 +2287,25 @@ justifyContent="space-between"
 >
 <Box sx={{ pr: 1 }}>
 <Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
-{formatCartItemDisplay(item)}
+  {formatCartItemDisplay(item)}
 </Typography>
-<Typography variant="body2" sx={{ opacity: 0.75 }}>
-{formatEUR(item.price)}
+
+{getCartItemAllergenLabels(item).length > 0 && (
+  <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
+    {getCartItemAllergenLabels(item).map((label) => (
+      <Chip
+        key={label}
+        label={label}
+        size="small"
+        color="warning"
+        variant="outlined"
+      />
+    ))}
+  </Stack>
+)}
+
+<Typography variant="body2" sx={{ opacity: 0.75, mt: 0.5 }}>
+  {formatEUR(item.price)}
 </Typography>
 </Box>
 
@@ -2623,14 +2912,64 @@ fullWidth
 />
 </Stack>
 
-<TextField
-label="Salads list (one per line)"
-value={cfgSaladsItemsText}
-onChange={(e) => setCfgSaladsItemsText(e.target.value)}
-multiline
-minRows={6}
-fullWidth
-/>
+<Box>
+  <Typography sx={{ fontWeight: 800, mb: 1.5 }}>
+    Salads
+  </Typography>
+
+  <Stack spacing={1.5}>
+    {cfgSaladRows.map((row) => (
+      <Paper key={row.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+        <Stack spacing={1.25}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TextField
+              label="Salad label"
+              fullWidth
+              value={row.label}
+              onChange={(e) =>
+                updateSaladRow(row.id, {
+                  label: e.target.value,
+                  value: slugifyItemValue(e.target.value)
+                })
+              }
+              placeholder="Tomato"
+            />
+
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              onClick={() => removeSaladRow(row.id)}
+            >
+              Remove
+            </Button>
+          </Stack>
+
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {ALLERGENS.map((a) => (
+              <Chip
+                key={a.key}
+                label={a.label}
+                clickable
+                color={row.allergens.includes(a.key) ? "error" : "default"}
+                variant={row.allergens.includes(a.key) ? "filled" : "outlined"}
+                onClick={() => toggleSaladRowAllergen(row.id, a.key)}
+              />
+            ))}
+          </Stack>
+        </Stack>
+      </Paper>
+    ))}
+
+    <Button
+      variant="outlined"
+      onClick={addSaladRow}
+      sx={{ alignSelf: "flex-start", fontWeight: 800 }}
+    >
+      + Add salad
+    </Button>
+  </Stack>
+</Box>
 
 <Divider />
 
@@ -2721,15 +3060,64 @@ fullWidth
             />
           </Stack>
 
-          <TextField
-            label="Items list (one per line)"
-            multiline
-            minRows={4}
-            fullWidth
-            value={group.itemsText}
-            onChange={(e) => updateOptionGroup(group.id, { itemsText: e.target.value })}
-            placeholder={`Butter\nHot (Spicy)`}
-          />
+          <Box>
+  <Typography sx={{ fontWeight: 700, mb: 1 }}>
+    Items
+  </Typography>
+
+  <Stack spacing={1.25}>
+    {(group.itemRows || []).map((row) => (
+      <Paper key={row.id} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+        <Stack spacing={1}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TextField
+              label="Item label"
+              fullWidth
+              value={row.label}
+              onChange={(e) =>
+                updateOptionItemRow(group.id, row.id, {
+                  label: e.target.value,
+                  value: slugifyItemValue(e.target.value)
+                })
+              }
+              placeholder="White"
+            />
+
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              onClick={() => removeOptionItemRow(group.id, row.id)}
+            >
+              Remove
+            </Button>
+          </Stack>
+
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {ALLERGENS.map((a) => (
+              <Chip
+                key={a.key}
+                label={a.label}
+                clickable
+                color={row.allergens.includes(a.key) ? "error" : "default"}
+                variant={row.allergens.includes(a.key) ? "filled" : "outlined"}
+                onClick={() => toggleOptionItemAllergen(group.id, row.id, a.key)}
+              />
+            ))}
+          </Stack>
+        </Stack>
+      </Paper>
+    ))}
+
+    <Button
+      variant="outlined"
+      onClick={() => addOptionItemRow(group.id)}
+      sx={{ alignSelf: "flex-start", fontWeight: 800 }}
+    >
+      + Add item
+    </Button>
+  </Stack>
+</Box>
         </Stack>
       </Paper>
     ))}
@@ -2939,104 +3327,131 @@ sx={{ fontWeight: 800 }}
 
 {/* OPTIONS */}
 {Array.isArray(configProduct?.config?.options) &&
-configProduct.config.options.map((opt) => {
-const value = customSelections[opt.key] ?? (opt.type === "multi" ? [] : "");
-const required = !!opt.required;
+  configProduct.config.options.map((opt) => {
+    const normalizedItems = normalizeConfigItems(opt.items || []);
+    const value = customSelections[opt.key] ?? (opt.type === "multi" ? [] : "");
+    const required = !!opt.required;
 
-return (
-<Paper key={opt.key} variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
-<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-<Typography sx={{ fontWeight: 900 }}>
-{opt.label} {required ? "*" : ""}
-</Typography>
-{required && (
-<Typography variant="body2" sx={{ opacity: 0.7 }}>
-Required
-</Typography>
-)}
-</Stack>
+    return (
+      <Paper key={opt.key} variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+          <Typography sx={{ fontWeight: 900 }}>
+            {opt.label} {required ? "*" : ""}
+          </Typography>
+          {required && (
+            <Typography variant="body2" sx={{ opacity: 0.7 }}>
+              Required
+            </Typography>
+          )}
+        </Stack>
 
-{opt.type === "single" ? (
-<ToggleButtonGroup
-value={value}
-exclusive
-onChange={(_, v) => {
-if (!v) return;
-setCustomSelections((prev) => ({ ...prev, [opt.key]: v }));
-}}
-sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}
->
-{(opt.items || []).map((it) => (
-<ToggleButton
-key={it}
-value={it}
-sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800, px: 2, py: 0.6 }}
->
-{it}
-</ToggleButton>
-))}
-</ToggleButtonGroup>
-) : (
-<ToggleButtonGroup
-value={value}
-onChange={(_, v) => setCustomSelections((prev) => ({ ...prev, [opt.key]: v }))}
-sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}
->
-{(opt.items || []).map((it) => (
-<ToggleButton
-key={it}
-value={it}
-sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800, px: 2, py: 0.6 }}
->
-{it}
-</ToggleButton>
-))}
-</ToggleButtonGroup>
-)}
-</Paper>
-);
-})}
+        {opt.type === "single" ? (
+          <ToggleButtonGroup
+            value={value}
+            exclusive
+            onChange={(_, v) => {
+              if (!v) return;
+              setCustomSelections((prev) => ({ ...prev, [opt.key]: v }));
+            }}
+            sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}
+          >
+            {normalizedItems.map((item) => (
+              <ToggleButton
+                key={item.value}
+                value={item.value}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: 800,
+                  px: 2,
+                  py: 0.8,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  gap: 0.5
+                }}
+              >
+                <Box sx={{ fontWeight: 800 }}>{item.label}</Box>
+                {renderAllergenChips(item.allergens)}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        ) : (
+          <ToggleButtonGroup
+            value={value}
+            onChange={(_, v) => setCustomSelections((prev) => ({ ...prev, [opt.key]: v }))}
+            sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}
+          >
+            {normalizedItems.map((item) => (
+              <ToggleButton
+                key={item.value}
+                value={item.value}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: 800,
+                  px: 2,
+                  py: 0.8,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  gap: 0.5
+                }}
+              >
+                <Box sx={{ fontWeight: 800 }}>{item.label}</Box>
+                {renderAllergenChips(item.allergens)}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        )}
+      </Paper>
+    );
+  })}
 
 {/* SALADS */}
 {configProduct?.config?.salads?.enabled && (
-<Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
-<Stack direction="row" justifyContent="space-between" alignItems="baseline">
-<Typography sx={{ fontWeight: 900 }}>Salads</Typography>
-<Typography variant="body2" sx={{ opacity: 0.75 }}>
-{saladsIncluded} included · +{formatEUR(extraPrice)} each extra
-</Typography>
-</Stack>
+  <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
+    <Stack direction="row" justifyContent="space-between" alignItems="baseline">
+      <Typography sx={{ fontWeight: 900 }}>Salads</Typography>
+      <Typography variant="body2" sx={{ opacity: 0.75 }}>
+        {saladsIncluded} included · +{formatEUR(extraPrice)} each extra
+      </Typography>
+    </Stack>
 
-<Grid container spacing={1} sx={{ mt: 1 }}>
-{(configProduct.config.salads.items || []).map((s) => {
-const checked = selectedSalads.includes(s);
-return (
-<Grid item xs={6} sm={4} key={s}>
-<Button
-fullWidth
-variant={checked ? "contained" : "outlined"}
-onClick={() => toggleSalad(s)}
-sx={{
-borderRadius: 2,
-justifyContent: "flex-start",
-fontWeight: checked ? 900 : 700,
-textTransform: "none",
-py: 1
-}}
->
-{s}
-</Button>
-</Grid>
-);
-})}
-</Grid>
+    <Grid container spacing={1} sx={{ mt: 1 }}>
+      {normalizeConfigItems(configProduct.config.salads.items || []).map((item) => {
+        const checked = selectedSalads.includes(item.value);
 
-{extraCount > 0 && (
-<Typography variant="caption" color="error" sx={{ display: "block", mt: 1 }}>
-Extra salads will be charged (+{formatEUR(extraCount * extraPrice)}).
-</Typography>
-)}
-</Paper>
+        return (
+          <Grid item xs={6} sm={4} key={item.value}>
+            <Button
+              fullWidth
+              variant={checked ? "contained" : "outlined"}
+              onClick={() => toggleSalad(item.value)}
+              sx={{
+                borderRadius: 2,
+                justifyContent: "flex-start",
+                alignItems: "flex-start",
+                flexDirection: "column",
+                fontWeight: checked ? 900 : 700,
+                textTransform: "none",
+                py: 1
+              }}
+            >
+              <Box sx={{ fontWeight: 800 }}>{item.label}</Box>
+              {renderAllergenChips(item.allergens)}
+            </Button>
+          </Grid>
+        );
+      })}
+    </Grid>
+
+    {extraCount > 0 && (
+      <Typography variant="caption" color="error" sx={{ display: "block", mt: 1 }}>
+        Extra salads will be charged (+{formatEUR(extraCount * extraPrice)}).
+      </Typography>
+    )}
+  </Paper>
 )}
 
 {/* SUMMARY */}
