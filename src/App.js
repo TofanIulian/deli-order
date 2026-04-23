@@ -1606,6 +1606,35 @@ function groupHistoryItems(items) {
   return Array.from(map.values());
 }
 
+function getDetailsItemGroupKey(item) {
+  return JSON.stringify({
+    name: item?.name || "",
+    price: Number(item?.price || 0),
+    drsDeposit: Number(item?.drsDeposit || 0),
+    selections: item?.selections || {},
+    selectionLabels: item?.selectionLabels || {}
+  });
+}
+
+function groupDetailsItems(items) {
+  const map = new Map();
+
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const key = getDetailsItemGroupKey(item);
+
+    if (!map.has(key)) {
+      map.set(key, {
+        item,
+        quantity: 1
+      });
+    } else {
+      map.get(key).quantity += 1;
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 async function saveEditConfig() {
 if (!editProduct) return;
 
@@ -2545,44 +2574,53 @@ Your Cart
       >
         <Box sx={{ pr: 1, flex: 1 }}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-            <Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
-              {formatCartItemDisplay(item)}
-            </Typography>
+  <Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
+    {formatCartItemDisplay(item)}
+  </Typography>
 
-            {quantity > 1 && (
-              <Chip
-                label={`x${quantity}`}
-                size="small"
-                color="primary"
-                variant="filled"
-                sx={{ fontWeight: 900 }}
-              />
-            )}
-          </Stack>
+  {quantity > 1 && (
+    <Chip
+      label={`x${quantity}`}
+      size="small"
+      color="primary"
+      variant="filled"
+      sx={{ fontWeight: 900 }}
+    />
+  )}
+</Stack>
 
-          {getCartItemAllergenLabels(item).length > 0 && (
-            <Stack
-              direction="row"
-              spacing={0.5}
-              flexWrap="wrap"
-              useFlexGap
-              sx={{ mt: 0.75 }}
-            >
-              {getCartItemAllergenLabels(item).map((label) => (
-                <Chip
-                  key={label}
-                  label={label}
-                  size="small"
-                  color="warning"
-                  variant="outlined"
-                />
-              ))}
-            </Stack>
-          )}
+{Number(item.drsDeposit || 0) > 0 && (
+  <Typography
+    variant="body2"
+    sx={{ mt: 0.35, fontWeight: 700, color: "warning.main" }}
+  >
+    DRS {formatEUR(Number(item.drsDeposit || 0) * quantity)}
+  </Typography>
+)}
 
-          <Typography variant="body2" sx={{ opacity: 0.75, mt: 0.5 }}>
-            {formatEUR(item.price)}
-          </Typography>
+{getCartItemAllergenLabels(item).length > 0 && (
+  <Stack
+    direction="row"
+    spacing={0.5}
+    flexWrap="wrap"
+    useFlexGap
+    sx={{ mt: 0.75 }}
+  >
+    {getCartItemAllergenLabels(item).map((label) => (
+      <Chip
+        key={label}
+        label={label}
+        size="small"
+        color="warning"
+        variant="outlined"
+      />
+    ))}
+  </Stack>
+)}
+
+<Typography variant="body2" sx={{ opacity: 0.75, mt: 0.5 }}>
+  {formatEUR(Number(item.price || 0) * quantity)}
+</Typography>
         </Box>
 
         <Button
@@ -3566,20 +3604,77 @@ Order details
 <Typography sx={{ opacity: 0.75 }}>No items stored.</Typography>
 ) : (
 <Stack spacing={0.6}>
-{(historySelected.items || []).map((it, idx) => (
-<Stack key={idx} direction="row" justifyContent="space-between">
-<Typography sx={{ fontWeight: 800 }}>{it.name}</Typography>
-<Typography sx={{ fontWeight: 900 }}>{formatEUR(it.price)}</Typography>
-</Stack>
+{groupDetailsItems(historySelected.items || []).map(({ item, quantity }, idx) => (
+  <Box key={idx}>
+    <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+      <Typography sx={{ fontWeight: 800, pr: 1 }}>
+        {formatCartItemDisplay(item)}
+        {quantity > 1 ? ` x${quantity}` : ""}
+      </Typography>
+
+      <Typography sx={{ fontWeight: 900 }}>
+        {formatEUR(Number(item.price || 0) * quantity)}
+      </Typography>
+    </Stack>
+
+    {Number(item.drsDeposit || 0) > 0 && (
+      <Typography
+        variant="body2"
+        sx={{ mt: 0.25, fontWeight: 700, color: "warning.main" }}
+      >
+        DRS {formatEUR(Number(item.drsDeposit || 0) * quantity)}
+      </Typography>
+    )}
+
+    {getCartItemAllergenLabels(item).length > 0 && (
+      <Stack
+        direction="row"
+        spacing={0.5}
+        flexWrap="wrap"
+        useFlexGap
+        sx={{ mt: 0.5 }}
+      >
+        {getCartItemAllergenLabels(item).map((label) => (
+          <Chip
+            key={label}
+            label={label}
+            size="small"
+            color="warning"
+            variant="outlined"
+          />
+        ))}
+      </Stack>
+    )}
+  </Box>
 ))}
 </Stack>
 )}
 
 <Divider sx={{ my: 1.25 }} />
 
-<Stack direction="row" justifyContent="space-between">
-<Typography sx={{ fontWeight: 900 }}>Total</Typography>
-<Typography sx={{ fontWeight: 1000 }}>{formatEUR(historySelected.total)}</Typography>
+<Stack spacing={0.75} sx={{ pt: 1, mt: 1, borderTop: "1px solid #ddd" }}>
+  <Stack direction="row" justifyContent="space-between">
+    <Typography sx={{ fontWeight: 700, opacity: 0.8 }}>Subtotal</Typography>
+    <Typography sx={{ fontWeight: 700 }}>
+      {formatEUR(historySelected.subtotal || 0)}
+    </Typography>
+  </Stack>
+
+  {Number(historySelected.drsTotal || 0) > 0 && (
+    <Stack direction="row" justifyContent="space-between">
+      <Typography sx={{ fontWeight: 700, color: "warning.main" }}>DRS</Typography>
+      <Typography sx={{ fontWeight: 700, color: "warning.main" }}>
+        {formatEUR(historySelected.drsTotal || 0)}
+      </Typography>
+    </Stack>
+  )}
+
+  <Stack direction="row" justifyContent="space-between">
+    <Typography sx={{ fontWeight: 900 }}>Total</Typography>
+    <Typography sx={{ fontWeight: 900 }}>
+      {formatEUR(historySelected.total || 0)}
+    </Typography>
+  </Stack>
 </Stack>
 </Paper>
 </Stack>
@@ -3611,78 +3706,7 @@ Track
 </DialogActions>
 </Dialog>
 
-<Dialog
-open={historyOpen}
-onClose={() => setHistoryOpen(false)}
-fullWidth
-maxWidth="sm"
->
-<DialogTitle sx={{ fontWeight: 900 }}>Order details</DialogTitle>
 
-<DialogContent dividers>
-{!historySelected ? (
-<Typography sx={{ opacity: 0.75 }}>No order selected.</Typography>
-) : (
-<Stack spacing={1.25}>
-<Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
-<Typography sx={{ fontWeight: 1000, letterSpacing: 2, fontSize: 20 }}>
-{historySelected.code}
-</Typography>
-<Typography sx={{ opacity: 0.75 }}>
-{historySelected.pickupDate} • {historySelected.pickupTime}
-</Typography>
-</Paper>
-
-<Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
-<Typography sx={{ fontWeight: 900, mb: 1 }}>Items</Typography>
-
-{(historySelected.items || []).length === 0 ? (
-<Typography sx={{ opacity: 0.75 }}>No items stored.</Typography>
-) : (
-<Stack spacing={0.6}>
-{(historySelected.items || []).map((it, idx) => (
-<Stack key={idx} direction="row" justifyContent="space-between">
-<Typography sx={{ fontWeight: 800 }}>{it.name}</Typography>
-<Typography sx={{ fontWeight: 900 }}>{formatEUR(it.price)}</Typography>
-</Stack>
-))}
-</Stack>
-)}
-
-<Divider sx={{ my: 1.25 }} />
-
-<Stack direction="row" justifyContent="space-between">
-<Typography sx={{ fontWeight: 900 }}>Total</Typography>
-<Typography sx={{ fontWeight: 1000 }}>
-{formatEUR(historySelected.total)}
-</Typography>
-</Stack>
-</Paper>
-</Stack>
-)}
-</DialogContent>
-
-<DialogActions sx={{ p: 2 }}>
-<Button variant="outlined" onClick={() => setHistoryOpen(false)}>
-Close
-</Button>
-
-{historySelected?.code && (
-<Button
-variant="contained"
-sx={{ fontWeight: 900 }}
-onClick={() => {
-setOrderCode(historySelected.code);
-localStorage.setItem("lastOrderCode", historySelected.code);
-setHistoryOpen(false);
-setSnack({ open: true, msg: `Tracking ${historySelected.code}` });
-}}
->
-Track
-</Button>
-)}
-</DialogActions>
-</Dialog>
 
 {/* SNACKBAR */}
 <Snackbar
