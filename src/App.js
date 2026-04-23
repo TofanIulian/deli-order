@@ -423,11 +423,14 @@ function getDaySectionLabel(iso) {
   return formatPickupDateShort(iso);
 }
 
-function ReportsPanel({ orders }) {
+function ReportsPanel({
+  orders,
+  fromDate,
+  toDate,
+  setFromDate,
+  setToDate
+}) {
 const todayStr = toLocalISODate(new Date());
-
-const [fromDate, setFromDate] = useState(todayStr);
-const [toDate, setToDate] = useState(todayStr);
 
 const filtered = useMemo(() => {
 const list = Array.isArray(orders) ? orders : [];
@@ -921,6 +924,9 @@ const audioUnlockedRef = useRef(false);
 const [showOnlyOpen, setShowOnlyOpen] = useState(true);
 const [staffTab, setStaffTab] = useState("orders");
 const [adminCategoryTab, setAdminCategoryTab] = useState("rolls");
+const todayStr = toLocalISODate(new Date());
+const [reportsFromDate, setReportsFromDate] = useState(todayStr);
+const [reportsToDate, setReportsToDate] = useState(todayStr);
 
 useEffect(() => {
 
@@ -3282,7 +3288,13 @@ size="small" />
     )}
 
     {staffTab === "reports" && isAdminRole && (
-      <ReportsPanel orders={ordersAll} />
+      <ReportsPanel
+  orders={ordersAll}
+  fromDate={reportsFromDate}
+  toDate={reportsToDate}
+  setFromDate={setReportsFromDate}
+  setToDate={setReportsToDate}
+/>
     )}
   </Box>
 )}
@@ -3705,7 +3717,6 @@ Track
 )}
 </DialogActions>
 </Dialog>
-
 
 
 {/* SNACKBAR */}
