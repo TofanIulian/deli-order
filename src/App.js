@@ -320,6 +320,7 @@ function buildStructuredCartItem(product, customSelections, selectedSalads, conf
     productId: product.id,
     name: product.name,
     price: Number(configTotalPrice.toFixed(2)),
+    drsDeposit: Number(product.drsDeposit || 0),
     selections,
     selectionLabels,
     selectionAllergens
@@ -331,6 +332,7 @@ function buildSimpleCartItem(product) {
     productId: product.id,
     name: product.name,
     price: Number(product.price || 0),
+    drsDeposit: Number(product.drsDeposit || 0),
     selections: {},
     selectionLabels: {},
     selectionAllergens: {
@@ -941,11 +943,16 @@ setStaffTab("orders");
 useEffect(() => {
   if (staffTab === "products") {
     setNewCategory(adminCategoryTab);
+    if (adminCategoryTab !== "drinks") {
+      setNewDrsDeposit("");
+    }
   }
 }, [adminCategoryTab, staffTab]);
+
 const [newName, setNewName] = useState("");
 const [newPrice, setNewPrice] = useState("");
 const [newCategory, setNewCategory] = useState("rolls");
+const [newDrsDeposit, setNewDrsDeposit] = useState("");
 // ===== CONFIGURATOR STATE =====
 const [configOpen, setConfigOpen] = useState(false);
 const [configProduct, setConfigProduct] = useState(null);
@@ -1113,7 +1120,9 @@ for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.lengt
 return code;
 }
 
-const total = cart.reduce((sum, item) => sum + Number(item.price || 0), 0);
+const subtotal = cart.reduce((sum, item) => sum + Number(item.price || 0), 0);
+const drsTotal = cart.reduce((sum, item) => sum + Number(item.drsDeposit || 0), 0);
+const total = subtotal + drsTotal;
 const canPlaceOrder = cart.length > 0 && pickupSlot !== null;
 
 async function placeOrder() {
@@ -1122,25 +1131,30 @@ const now = new Date();
 const pickupDate = toLocalISODate(now);
 
 const newOrder = {
-code,
-pickupTime: pickupSlot.label,
-pickupStartMin: pickupSlot.startMin,
-pickupDate,
-items: cart,
-total: Number(total.toFixed(2)),
-status: STATUS.NEW,
-createdAt: serverTimestamp()
+  code,
+  pickupTime: pickupSlot.label,
+  pickupStartMin: pickupSlot.startMin,
+  pickupDate,
+  items: cart,
+  subtotal: Number(subtotal.toFixed(2)),
+  drsTotal: Number(drsTotal.toFixed(2)),
+  total: Number(total.toFixed(2)),
+  status: STATUS.NEW,
+  createdAt: serverTimestamp()
 };
 
 const entry = {
   code,
   pickupDate,
   pickupTime: pickupSlot.label,
+  subtotal: Number(subtotal.toFixed(2)),
+  drsTotal: Number(drsTotal.toFixed(2)),
   total: Number(total.toFixed(2)),
 items: cart.map((it) => ({
   productId: it.productId || null,
   name: it.name,
   price: Number(it.price || 0),
+  drsDeposit: Number(it.drsDeposit || 0),
   selections: it.selections || {},
   selectionLabels: it.selectionLabels || {},
   selectionAllergens: it.selectionAllergens || {}
@@ -1203,18 +1217,23 @@ const price = Number(newPrice);
 
 if (!name) return alert("Scrie numele produsului");
 if (!Number.isFinite(price) || price <= 0) return alert("Pret invalid");
+if (newCategory === "drinks" && newDrsDeposit === "") {
+  return alert("Selectează DRS pentru băutură");
+}
 
 await addDoc(collection(db, "products"), {
-name,
-price,
-category: newCategory,   // ✅ IMPORTANT
-active: true,
-createdAt: serverTimestamp()
+  name,
+  price,
+  category: newCategory,
+  drsDeposit: newCategory === "drinks" ? Number(newDrsDeposit || 0) : 0,
+  active: true,
+  createdAt: serverTimestamp()
 });
 
 setNewName("");
 setNewPrice("");
 setNewCategory("rolls");
+setNewDrsDeposit("");
 }
 
 async function updateProductCategory(product, category) {
@@ -1888,14 +1907,27 @@ function buildReceiptText(order) {
       const selectionLines = formatReceiptSelectionLines(label, value, 24);
       selectionLines.forEach((line) => lines.push(line));
     });
-
+const itemDrs = Number(item.drsDeposit || 0) * quantity;
+if (itemDrs > 0) {
+  lines.push(`  DRS: ${itemDrs.toFixed(2)}`);
+}
     lines.push("");
   });
 
-  lines.push("------------------------------------");
-  lines.push(
-    `[[BOLD]]${formatLine("TOTAL", Number(order.total || 0).toFixed(2), RECEIPT_WIDTH)}[[/BOLD]]`
-  );
+  const receiptSubtotal = Number(order.subtotal ?? 0);
+const receiptDrsTotal = Number(order.drsTotal ?? 0);
+const receiptTotal = Number(order.total ?? 0);
+
+lines.push("------------------------------------");
+lines.push(formatLine("SUBTOTAL", receiptSubtotal.toFixed(2), RECEIPT_WIDTH));
+
+if (receiptDrsTotal > 0) {
+  lines.push(formatLine("DRS", receiptDrsTotal.toFixed(2), RECEIPT_WIDTH));
+}
+
+lines.push(
+  `[[BOLD]]${formatLine("TOTAL", receiptTotal.toFixed(2), RECEIPT_WIDTH)}[[/BOLD]]`
+);
 
   return lines.join("\n");
 }
@@ -2311,34 +2343,41 @@ justifyContent="space-between"
 spacing={2}
 >
 <Box>
-<Typography sx={{ fontWeight: 900 }}>
-{product.name}
-</Typography>
+  <Typography sx={{ fontWeight: 900 }}>
+    {product.name}
+  </Typography>
 
-<Typography variant="body2" sx={{ opacity: 0.7 }}>
-{formatEUR(product.price)}
+  <Box sx={{ mt: 0.25 }}>
+    <Typography variant="body2" sx={{ opacity: 0.7 }}>
+      {formatEUR(product.price)}
+    </Typography>
 
-{Array.isArray(product.allergens) && product.allergens.length > 0 && (
-  <Stack
-    direction="row"
-    spacing={0.5}
-    flexWrap="wrap"
-    useFlexGap
-    sx={{ mt: 0.75 }}
-  >
-    {getAllergenLabels(product.allergens).map((label) => (
-      <Chip
-        key={label}
-        label={label}
-        size="small"
-        color="warning"
-        variant="outlined"
-      />
-    ))}
-  </Stack>
-)}
+    {Number(product.drsDeposit || 0) > 0 && (
+      <Typography variant="body2" sx={{ fontWeight: 800, color: "warning.main" }}>
+        + DRS {formatEUR(product.drsDeposit)}
+      </Typography>
+    )}
+  </Box>
 
-</Typography>
+  {Array.isArray(product.allergens) && product.allergens.length > 0 && (
+    <Stack
+      direction="row"
+      spacing={0.5}
+      flexWrap="wrap"
+      useFlexGap
+      sx={{ mt: 0.75 }}
+    >
+      {getAllergenLabels(product.allergens).map((label) => (
+        <Chip
+          key={label}
+          label={label}
+          size="small"
+          color="warning"
+          variant="outlined"
+        />
+      ))}
+    </Stack>
+  )}
 </Box>
 
 {!isOut && (
@@ -2524,9 +2563,33 @@ Your Cart
 
 <Divider sx={{ my: 2 }} />
 
-<Stack direction="row" justifyContent="space-between" alignItems="center">
-<Typography sx={{ fontWeight: 900, fontSize: 18 }}>Total</Typography>
-<Typography sx={{ fontWeight: 900, fontSize: 18 }}>{formatEUR(total)}</Typography>
+<Stack spacing={0.75}>
+  <Stack direction="row" justifyContent="space-between" alignItems="center">
+    <Typography sx={{ fontWeight: 700, fontSize: 16, opacity: 0.8 }}>
+      Subtotal
+    </Typography>
+    <Typography sx={{ fontWeight: 700, fontSize: 16 }}>
+      {formatEUR(subtotal)}
+    </Typography>
+  </Stack>
+
+  {drsTotal > 0 && (
+    <Stack direction="row" justifyContent="space-between" alignItems="center">
+      <Typography sx={{ fontWeight: 700, fontSize: 16, color: "warning.main" }}>
+        DRS
+      </Typography>
+      <Typography sx={{ fontWeight: 700, fontSize: 16, color: "warning.main" }}>
+        {formatEUR(drsTotal)}
+      </Typography>
+    </Stack>
+  )}
+
+  <Stack direction="row" justifyContent="space-between" alignItems="center">
+    <Typography sx={{ fontWeight: 900, fontSize: 18 }}>Total</Typography>
+    <Typography sx={{ fontWeight: 900, fontSize: 18 }}>
+      {formatEUR(total)}
+    </Typography>
+  </Stack>
 </Stack>
 
 <Divider sx={{ my: 2 }} />
@@ -3001,6 +3064,44 @@ size="small" />
           </CardContent>
         </Card>
 
+{adminCategoryTab === "drinks" && (
+  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+    <TextField
+  select
+  label="Deposit Return Scheme (DRS)"
+  value={newDrsDeposit}
+  onChange={(e) => setNewDrsDeposit(e.target.value)}
+  size="small"
+  sx={{ width: 220 }}
+>
+  <MenuItem value="" disabled>
+    Select DRS
+  </MenuItem>
+  <MenuItem value="0">No DRS</MenuItem>
+  <MenuItem value="0.15">DRS €0.15</MenuItem>
+  <MenuItem value="0.25">DRS €0.25</MenuItem>
+</TextField>
+
+    <Chip
+  label={
+    newDrsDeposit === ""
+      ? "DRS not selected"
+      : Number(newDrsDeposit) > 0
+      ? `Selected: DRS €${Number(newDrsDeposit).toFixed(2)}`
+      : "Selected: No DRS"
+  }
+  color={
+    newDrsDeposit === ""
+      ? "error"
+      : Number(newDrsDeposit) > 0
+      ? "warning"
+      : "default"
+  }
+  variant={newDrsDeposit === "" ? "filled" : Number(newDrsDeposit) > 0 ? "filled" : "outlined"}
+  sx={{ fontWeight: 900, height: 40 }}
+/>
+  </Stack>
+)}
         {productsDb.length === 0 && (
           <Typography sx={{ opacity: 0.7 }}>No products yet.</Typography>
         )}
@@ -3018,6 +3119,14 @@ size="small" />
                   color={p.active === false ? "default" : "success"}
                   variant={p.active === false ? "outlined" : "filled"}
                 />
+                {getCategory(p) === "drinks" && Number(p.drsDeposit || 0) > 0 && (
+    <Chip
+      size="small"
+      label={`DRS €${Number(p.drsDeposit).toFixed(2)}`}
+      color="warning"
+      variant="outlined"
+    />
+  )}
               </Stack>
 
 {Array.isArray(p.allergens) && p.allergens.length > 0 && (
@@ -3073,11 +3182,11 @@ size="small" />
                   {p.active === false ? "Back in stock" : "Out of stock"}
                 </Button>
 
-                {isAdminRole && (
-                  <Button variant="outlined" onClick={() => openEditConfig(p)}>
-                    Edit config
-                  </Button>
-                )}
+                {isAdminRole && getCategory(p) !== "drinks" && (
+  <Button variant="outlined" onClick={() => openEditConfig(p)}>
+    Edit config
+  </Button>
+)}
 
                 <Button
                   variant="outlined"
