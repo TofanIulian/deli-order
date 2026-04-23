@@ -1804,7 +1804,33 @@ function formatReceiptSelectionLines(label, value, valueWidth = 24) {
   return lines.map((line, idx) => (idx === 0 ? prefix + line : indent + line));
 }
 
+function getReceiptItemGroupKey(item) {
+  return JSON.stringify({
+    name: item?.name || "",
+    price: Number(item?.price || 0),
+    selections: item?.selections || {},
+    selectionLabels: item?.selectionLabels || {}
+  });
+}
 
+function groupReceiptItems(items) {
+  const map = new Map();
+
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const key = getReceiptItemGroupKey(item);
+
+    if (!map.has(key)) {
+      map.set(key, {
+        item,
+        quantity: 1
+      });
+    } else {
+      map.get(key).quantity += 1;
+    }
+  });
+
+  return Array.from(map.values());
+}
 
 function buildReceiptText(order) {
   const lines = [];
@@ -1813,14 +1839,18 @@ function buildReceiptText(order) {
   lines.push(`Pickup: ${order.pickupDate || ""} ${order.pickupTime || ""}`);
   lines.push("");
 
-  (order.items || []).forEach((it) => {
-    const baseName = String(it.name || "Item").trim();
-    const price = Number(it.price || 0).toFixed(2);
+  const groupedItems = groupReceiptItems(order.items || []);
 
-    lines.push(`[[BOLD]]${formatLine(baseName, price, RECEIPT_WIDTH)}[[/BOLD]]`);
+  groupedItems.forEach(({ item, quantity }) => {
+    const baseName = String(item.name || "Item").trim();
+    const nameWithQty = quantity > 1 ? `${baseName} x${quantity}` : baseName;
 
-    const selections = it.selections || {};
-    const selectionLabels = it.selectionLabels || {};
+    const lineTotal = Number((Number(item.price || 0) * quantity).toFixed(2)).toFixed(2);
+
+    lines.push(`[[BOLD]]${formatLine(nameWithQty, lineTotal, RECEIPT_WIDTH)}[[/BOLD]]`);
+
+    const selections = item.selections || {};
+    const selectionLabels = item.selectionLabels || {};
 
     Object.entries(selections).forEach(([key, value]) => {
       const hasValue = Array.isArray(value) ? value.length > 0 : !!value;
