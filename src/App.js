@@ -1832,6 +1832,34 @@ function groupReceiptItems(items) {
   return Array.from(map.values());
 }
 
+function getStaffItemGroupKey(item) {
+  return JSON.stringify({
+    name: item?.name || "",
+    price: Number(item?.price || 0),
+    selections: item?.selections || {},
+    selectionLabels: item?.selectionLabels || {}
+  });
+}
+
+function groupStaffItems(items) {
+  const map = new Map();
+
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const key = getStaffItemGroupKey(item);
+
+    if (!map.has(key)) {
+      map.set(key, {
+        item,
+        quantity: 1
+      });
+    } else {
+      map.get(key).quantity += 1;
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 function buildReceiptText(order) {
   const lines = [];
 
@@ -2820,18 +2848,19 @@ size="small" />
                   />
 
                   <Typography sx={{ mt: 1, fontWeight: 800 }}>Items</Typography>
-                  {(order.items || []).map((it, idx) => (
-                    <Typography
-                      key={idx}
-                      sx={{
-                        fontSize: 14 * STAFF_FONT_SCALE,
-                        fontWeight: 800,
-                        lineHeight: 1.35
-                      }}
-                    >
-                      - {it.displayName || it.name} ({formatEUR(it.price)})
-                    </Typography>
-                  ))}
+{groupStaffItems(order.items || []).map(({ item, quantity }, idx) => (
+  <Typography
+    key={idx}
+    sx={{
+      fontSize: 14 * STAFF_FONT_SCALE,
+      fontWeight: 800,
+      lineHeight: 1.35
+    }}
+  >
+    - {formatCartItemDisplay(item)}
+    {quantity > 1 ? ` x${quantity}` : ""} ({formatEUR(Number(item.price || 0) * quantity)})
+  </Typography>
+))}
 
                   <Box
                     sx={{
