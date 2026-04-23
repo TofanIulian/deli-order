@@ -2238,6 +2238,7 @@ const itemsToAdd = (o.items || []).map((it) => ({
   productId: it.productId || null,
   name: it.name,
   price: Number(it.price || 0),
+  drsDeposit: Number(it.drsDeposit || 0),
   selections: it.selections || {},
   selectionLabels: it.selectionLabels || {},
   selectionAllergens: it.selectionAllergens || {}
