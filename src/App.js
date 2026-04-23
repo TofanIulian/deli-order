@@ -1577,6 +1577,35 @@ function groupCartItems(items) {
   return Array.from(map.values());
 }
 
+function getHistoryItemGroupKey(item) {
+  return JSON.stringify({
+    name: item?.name || "",
+    price: Number(item?.price || 0),
+    drsDeposit: Number(item?.drsDeposit || 0),
+    selections: item?.selections || {},
+    selectionLabels: item?.selectionLabels || {}
+  });
+}
+
+function groupHistoryItems(items) {
+  const map = new Map();
+
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const key = getHistoryItemGroupKey(item);
+
+    if (!map.has(key)) {
+      map.set(key, {
+        item,
+        quantity: 1
+      });
+    } else {
+      map.get(key).quantity += 1;
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 async function saveEditConfig() {
 if (!editProduct) return;
 
@@ -2184,13 +2213,23 @@ mb: 1
 </Typography>
 
 <Stack spacing={0.75} sx={{ mt: 0.5 }}>
-  {(o.items || []).map((it, idx) => (
+  {groupHistoryItems(o.items || []).map(({ item, quantity }, idx) => (
     <Box key={idx}>
       <Typography variant="body2" sx={{ opacity: 0.75 }}>
-        {formatCartItemDisplay(it)}
+        {formatCartItemDisplay(item)}
+        {quantity > 1 ? ` x${quantity}` : ""}
       </Typography>
 
-      {getCartItemAllergenLabels(it).length > 0 && (
+      {Number(item.drsDeposit || 0) > 0 && (
+        <Typography
+          variant="body2"
+          sx={{ mt: 0.25, fontWeight: 700, color: "warning.main" }}
+        >
+          DRS {formatEUR(Number(item.drsDeposit || 0) * quantity)}
+        </Typography>
+      )}
+
+      {getCartItemAllergenLabels(item).length > 0 && (
         <Stack
           direction="row"
           spacing={0.5}
@@ -2198,7 +2237,7 @@ mb: 1
           useFlexGap
           sx={{ mt: 0.5 }}
         >
-          {getCartItemAllergenLabels(it).map((label) => (
+          {getCartItemAllergenLabels(item).map((label) => (
             <Chip
               key={label}
               label={label}
