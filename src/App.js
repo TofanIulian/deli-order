@@ -262,6 +262,7 @@ const ALLERGENS = [
 ];
 const [cfgSaladRows, setCfgSaladRows] = useState([]);
 
+
 function buildStructuredCartItem(product, customSelections, selectedSalads, configTotalPrice) {
   const selections = {};
   const selectionLabels = {};
@@ -322,6 +323,19 @@ function buildStructuredCartItem(product, customSelections, selectedSalads, conf
     selections,
     selectionLabels,
     selectionAllergens
+  };
+}
+
+function buildSimpleCartItem(product) {
+  return {
+    productId: product.id,
+    name: product.name,
+    price: Number(product.price || 0),
+    selections: {},
+    selectionLabels: {},
+    selectionAllergens: {
+      product: Array.isArray(product.allergens) ? product.allergens : []
+    }
   };
 }
 
@@ -862,6 +876,7 @@ setPassword("");
 
 // ===== CLIENT STATE =====
 const [cart, setCart] = useState([]);
+const groupedCartItems = groupCartItems(cart);
 const [pickupSlot, setPickupSlot] = useState(null);
 const [activeCategory, setActiveCategory] = useState("rolls"); // default deschis: Rolls
 const [orderCode, setOrderCode] = useState(() => {
@@ -903,6 +918,7 @@ const audioUnlockedRef = useRef(false);
 // ===== STAFF UI STATE =====
 const [showOnlyOpen, setShowOnlyOpen] = useState(true);
 const [staffTab, setStaffTab] = useState("orders");
+const [adminCategoryTab, setAdminCategoryTab] = useState("rolls");
 
 useEffect(() => {
 
@@ -922,6 +938,11 @@ if (!isAdminRole && staffTab === "products") {
 setStaffTab("orders");
 }
 }, [isAdminRole, staffTab]);
+useEffect(() => {
+  if (staffTab === "products") {
+    setNewCategory(adminCategoryTab);
+  }
+}, [adminCategoryTab, staffTab]);
 const [newName, setNewName] = useState("");
 const [newPrice, setNewPrice] = useState("");
 const [newCategory, setNewCategory] = useState("rolls");
@@ -932,6 +953,7 @@ const [selectedSalads, setSelectedSalads] = useState([]);
 const [customSelections, setCustomSelections] = useState({});
 const [editOpen, setEditOpen] = useState(false);
 const [editProduct, setEditProduct] = useState(null);
+const [cfgProductAllergens, setCfgProductAllergens] = useState([]);
 
 // draft fields (simple, safe)
 const [cfgSaladsEnabled, setCfgSaladsEnabled] = useState(false);
@@ -1074,10 +1096,14 @@ setCart((prev) => [...prev, item]);
 setSnack({ open: true, msg: "Added to cart" });
 }
 
-function removeFromCart(indexToRemove) {
 
+function removeOneFromCartGroup(groupKey) {
+  setCart((prev) => {
+    const idx = prev.findIndex((item) => getCartItemGroupKey(item) === groupKey);
+    if (idx === -1) return prev;
 
-setCart((prev) => prev.filter((_, i) => i !== indexToRemove));
+    return prev.filter((_, i) => i !== idx);
+  });
 }
 
 function generateOrderCode() {
@@ -1212,6 +1238,7 @@ await deleteDoc(doc(db, "products", product.id));
 }
 function openEditConfig(p) {
   setEditProduct(p);
+  setCfgProductAllergens(Array.isArray(p?.allergens) ? p.allergens : []);
 
   const salads = p?.config?.salads || {};
   setCfgSaladsEnabled(!!salads.enabled);
@@ -1492,6 +1519,44 @@ function renderAllergenChips(allergenKeys) {
   );
 }
 
+function toggleProductAllergen(allergenKey) {
+  setCfgProductAllergens((prev) =>
+    prev.includes(allergenKey)
+      ? prev.filter((x) => x !== allergenKey)
+      : [...prev, allergenKey]
+  );
+}
+
+function getCartItemGroupKey(item) {
+  return JSON.stringify({
+    productId: item?.productId || null,
+    name: item?.name || "",
+    price: Number(item?.price || 0),
+    selections: item?.selections || {},
+    selectionLabels: item?.selectionLabels || {},
+    selectionAllergens: item?.selectionAllergens || {}
+  });
+}
+
+function groupCartItems(items) {
+  const map = new Map();
+
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const key = getCartItemGroupKey(item);
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        item,
+        quantity: 1
+      });
+    } else {
+      map.get(key).quantity += 1;
+    }
+  });
+
+  return Array.from(map.values());
+}
 
 async function saveEditConfig() {
 if (!editProduct) return;
@@ -1511,7 +1576,10 @@ items: saladsItems
 options: editorGroupsToOptions(cfgOptionGroups)
 };
 
-await updateDoc(doc(db, "products", editProduct.id), { config });
+await updateDoc(doc(db, "products", editProduct.id), {
+  config,
+  allergens: cfgProductAllergens
+});
 
 setEditOpen(false);
 setEditProduct(null);
@@ -2025,9 +2093,35 @@ mb: 1
 {formatShortDate(o.pickupDate)} • {o.pickupTime} • {formatEUR(o.total)}
 </Typography>
 
-<Typography variant="body2" sx={{ opacity: 0.75 }} noWrap>
-{(o.items || []).map((it) => formatCartItemDisplay(it)).join(", ")}
-</Typography>
+<Stack spacing={0.75} sx={{ mt: 0.5 }}>
+  {(o.items || []).map((it, idx) => (
+    <Box key={idx}>
+      <Typography variant="body2" sx={{ opacity: 0.75 }}>
+        {formatCartItemDisplay(it)}
+      </Typography>
+
+      {getCartItemAllergenLabels(it).length > 0 && (
+        <Stack
+          direction="row"
+          spacing={0.5}
+          flexWrap="wrap"
+          useFlexGap
+          sx={{ mt: 0.5 }}
+        >
+          {getCartItemAllergenLabels(it).map((label) => (
+            <Chip
+              key={label}
+              label={label}
+              size="small"
+              color="warning"
+              variant="outlined"
+            />
+          ))}
+        </Stack>
+      )}
+    </Box>
+  ))}
+</Stack>
 </Box>
 
 <Stack direction="row" spacing={1} flexWrap="wrap">
@@ -2166,6 +2260,26 @@ spacing={2}
 <Typography variant="body2" sx={{ opacity: 0.7 }}>
 {formatEUR(product.price)}
 
+{Array.isArray(product.allergens) && product.allergens.length > 0 && (
+  <Stack
+    direction="row"
+    spacing={0.5}
+    flexWrap="wrap"
+    useFlexGap
+    sx={{ mt: 0.75 }}
+  >
+    {getAllergenLabels(product.allergens).map((label) => (
+      <Chip
+        key={label}
+        label={label}
+        size="small"
+        color="warning"
+        variant="outlined"
+      />
+    ))}
+  </Stack>
+)}
+
 </Typography>
 </Box>
 
@@ -2181,9 +2295,12 @@ boxShadow: isConfigurable ? 0 : 2
 }}
 disabled={!isOpen || isOut}
 onClick={() => {
-if (isConfigurable) openConfigurator(product);
-else addToCart(product);
-} }
+  if (isConfigurable) {
+    openConfigurator(product);
+  } else {
+    addToCart(buildSimpleCartItem(product));
+  }
+}}
 >
 {isConfigurable ? "Customize →" : "Add +"}
 </Button>
@@ -2268,59 +2385,82 @@ Your Cart
 <Typography sx={{ opacity: 0.75 }}>Your cart is empty.</Typography>
 ) : (
 <Stack spacing={1}>
-{cart.map((item, index) => (
-<Paper
-key={item.id ?? index}
-variant="outlined"
-sx={{
-p: 1.25,
-borderRadius: 3,
-transition: "all 0.2s ease",
-"&:active": { transform: "scale(0.98)" }
-}}
->
-<Stack
-direction="row"
-spacing={1}
-alignItems="flex-start"
-justifyContent="space-between"
->
-<Box sx={{ pr: 1 }}>
-<Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
-  {formatCartItemDisplay(item)}
-</Typography>
+{groupedCartItems.map((group, index) => {
+  const item = group.item;
+  const quantity = group.quantity;
 
-{getCartItemAllergenLabels(item).length > 0 && (
-  <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
-    {getCartItemAllergenLabels(item).map((label) => (
-      <Chip
-        key={label}
-        label={label}
-        size="small"
-        color="warning"
-        variant="outlined"
-      />
-    ))}
-  </Stack>
-)}
+  return (
+    <Paper
+      key={group.key ?? index}
+      variant="outlined"
+      sx={{
+        p: 1.25,
+        borderRadius: 3,
+        transition: "all 0.2s ease",
+        "&:active": { transform: "scale(0.98)" }
+      }}
+    >
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="flex-start"
+        justifyContent="space-between"
+      >
+        <Box sx={{ pr: 1, flex: 1 }}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <Typography sx={{ fontWeight: 900, lineHeight: 1.2 }}>
+              {formatCartItemDisplay(item)}
+            </Typography>
 
-<Typography variant="body2" sx={{ opacity: 0.75, mt: 0.5 }}>
-  {formatEUR(item.price)}
-</Typography>
-</Box>
+            {quantity > 1 && (
+              <Chip
+                label={`x${quantity}`}
+                size="small"
+                color="primary"
+                variant="filled"
+                sx={{ fontWeight: 900 }}
+              />
+            )}
+          </Stack>
 
-<Button
-size="small"
-variant="outlined"
-color="error"
-sx={{ borderRadius: 2, minWidth: 0, px: 1.2 }}
-onClick={() => removeFromCart(index)}
->
-X
-</Button>
-</Stack>
-</Paper>
-))}
+          {getCartItemAllergenLabels(item).length > 0 && (
+            <Stack
+              direction="row"
+              spacing={0.5}
+              flexWrap="wrap"
+              useFlexGap
+              sx={{ mt: 0.75 }}
+            >
+              {getCartItemAllergenLabels(item).map((label) => (
+                <Chip
+                  key={label}
+                  label={label}
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                />
+              ))}
+            </Stack>
+          )}
+
+          <Typography variant="body2" sx={{ opacity: 0.75, mt: 0.5 }}>
+            {formatEUR(item.price)}
+          </Typography>
+        </Box>
+
+        <Button
+          size="small"
+          variant="outlined"
+          color="error"
+          sx={{ borderRadius: 2, minWidth: 0, px: 1.2 }}
+          onClick={() => removeOneFromCartGroup(group.key)}
+        >
+          X
+        </Button>
+      </Stack>
+    </Paper>
+  );
+})}
 </Stack>
 )}
 
@@ -2752,7 +2892,21 @@ size="small" />
         <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
           Products (Admin)
         </Typography>
-
+<Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
+  {CATEGORIES.map((c) => (
+    <Button
+      key={c.key}
+      variant={adminCategoryTab === c.key ? "contained" : "outlined"}
+      onClick={() => {
+        setAdminCategoryTab(c.key);
+        setNewCategory(c.key);
+      }}
+      sx={{ borderRadius: 999, fontWeight: 900 }}
+    >
+      {c.label}
+    </Button>
+  ))}
+</Stack>
         <Card sx={{ borderRadius: 3, mb: 2 }}>
           <CardContent>
             <Typography sx={{ fontWeight: 800, mb: 1 }}>Add product</Typography>
@@ -2768,18 +2922,12 @@ size="small" />
                 onChange={(e) => setNewName(e.target.value)}
                 size="small"
               />
-              <TextField
-                select
-                label="Category"
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                size="small"
-                sx={{ width: 160 }}
-              >
-                <MenuItem value="rolls">ROLLS</MenuItem>
-                <MenuItem value="sides">SIDES</MenuItem>
-                <MenuItem value="drinks">DRINKS</MenuItem>
-              </TextField>
+              <Chip
+  label={`Adding to: ${adminCategoryTab.toUpperCase()}`}
+  color="primary"
+  variant="outlined"
+  sx={{ fontWeight: 900, height: 40 }}
+/>
               <TextField
                 label="Price"
                 value={newPrice}
@@ -2798,7 +2946,9 @@ size="small" />
           <Typography sx={{ opacity: 0.7 }}>No products yet.</Typography>
         )}
 
-        {productsDb.map((p) => (
+        {productsDb
+  .filter((p) => getCategory(p) === adminCategoryTab)
+  .map((p) => (
           <Card key={p.id} sx={{ mb: 2, borderRadius: 3 }}>
             <CardContent>
               <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
@@ -2810,6 +2960,20 @@ size="small" />
                   variant={p.active === false ? "outlined" : "filled"}
                 />
               </Stack>
+
+{Array.isArray(p.allergens) && p.allergens.length > 0 && (
+  <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+    {getAllergenLabels(p.allergens).map((label) => (
+      <Chip
+        key={label}
+        label={label}
+        size="small"
+        color="warning"
+        variant="outlined"
+      />
+    ))}
+  </Stack>
+)}
 
               <Stack
                 direction="row"
@@ -2886,6 +3050,24 @@ Edit config: {editProduct?.name || ""}
 </DialogTitle>
 
 <DialogContent dividers>
+  <Box sx={{ mb: 2 }}>
+  <Typography sx={{ fontWeight: 800, mb: 1.25 }}>
+    Product allergens
+  </Typography>
+
+  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+    {ALLERGENS.map((a) => (
+      <Chip
+        key={a.key}
+        label={a.label}
+        clickable
+        color={cfgProductAllergens.includes(a.key) ? "error" : "default"}
+        variant={cfgProductAllergens.includes(a.key) ? "filled" : "outlined"}
+        onClick={() => toggleProductAllergen(a.key)}
+      />
+    ))}
+  </Stack>
+</Box>
 <Stack spacing={2}>
 <FormControlLabel
 control={
@@ -2894,6 +3076,7 @@ checked={cfgSaladsEnabled}
 onChange={(e) => setCfgSaladsEnabled(e.target.checked)}
 />
 }
+
 label="Enable salads"
 />
 
