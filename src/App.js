@@ -317,14 +317,15 @@ function buildStructuredCartItem(product, customSelections, selectedSalads, conf
   }
 
   return {
-    productId: product.id,
-    name: product.name,
-    price: Number(configTotalPrice.toFixed(2)),
-    drsDeposit: Number(product.drsDeposit || 0),
-    selections,
-    selectionLabels,
-    selectionAllergens
-  };
+  productId: product.id,
+  name: product.name,
+  price: Number(configTotalPrice.toFixed(2)),
+  vatRate: Number(product.vatRate || 0),
+  drsDeposit: Number(product.drsDeposit || 0),
+  selections,
+  selectionLabels,
+  selectionAllergens
+};
 }
 
 function buildSimpleCartItem(product) {
@@ -332,6 +333,7 @@ function buildSimpleCartItem(product) {
     productId: product.id,
     name: product.name,
     price: Number(product.price || 0),
+    vatRate: Number(product.vatRate || 0),
     drsDeposit: Number(product.drsDeposit || 0),
     selections: {},
     selectionLabels: {},
@@ -959,6 +961,7 @@ const [newName, setNewName] = useState("");
 const [newPrice, setNewPrice] = useState("");
 const [newCategory, setNewCategory] = useState("rolls");
 const [newDrsDeposit, setNewDrsDeposit] = useState("");
+const [newVatRate, setNewVatRate] = useState("0");
 // ===== CONFIGURATOR STATE =====
 const [configOpen, setConfigOpen] = useState(false);
 const [configProduct, setConfigProduct] = useState(null);
@@ -1128,6 +1131,10 @@ return code;
 
 const subtotal = cart.reduce((sum, item) => sum + Number(item.price || 0), 0);
 const drsTotal = cart.reduce((sum, item) => sum + Number(item.drsDeposit || 0), 0);
+const vatIncludedTotal = cart.reduce(
+  (sum, item) => sum + getIncludedVatAmount(item.price, item.vatRate),
+  0
+);
 const total = subtotal + drsTotal;
 const canPlaceOrder = cart.length > 0 && pickupSlot !== null;
 
@@ -1144,6 +1151,7 @@ const newOrder = {
   items: cart,
   subtotal: Number(subtotal.toFixed(2)),
   drsTotal: Number(drsTotal.toFixed(2)),
+  vatIncludedTotal: Number(vatIncludedTotal.toFixed(2)),
   total: Number(total.toFixed(2)),
   status: STATUS.NEW,
   createdAt: serverTimestamp()
@@ -1155,11 +1163,13 @@ const entry = {
   pickupTime: pickupSlot.label,
   subtotal: Number(subtotal.toFixed(2)),
   drsTotal: Number(drsTotal.toFixed(2)),
+  vatIncludedTotal: Number(vatIncludedTotal.toFixed(2)),
   total: Number(total.toFixed(2)),
 items: cart.map((it) => ({
   productId: it.productId || null,
   name: it.name,
   price: Number(it.price || 0),
+  vatRate: Number(it.vatRate || 0),
   drsDeposit: Number(it.drsDeposit || 0),
   selections: it.selections || {},
   selectionLabels: it.selectionLabels || {},
@@ -1231,6 +1241,7 @@ await addDoc(collection(db, "products"), {
   name,
   price,
   category: newCategory,
+  vatRate: Number(newVatRate || 0),
   drsDeposit: newCategory === "drinks" ? Number(newDrsDeposit || 0) : 0,
   active: true,
   createdAt: serverTimestamp()
@@ -1240,6 +1251,7 @@ setNewName("");
 setNewPrice("");
 setNewCategory("rolls");
 setNewDrsDeposit("");
+setNewVatRate("0");
 }
 
 async function updateProductCategory(product, category) {
@@ -1668,6 +1680,17 @@ setEditOpen(false);
 setEditProduct(null);
 }
 
+function getIncludedVatAmount(gross, vatRate) {
+  const grossNum = Number(gross || 0);
+  const rateNum = Number(vatRate || 0);
+
+  if (!Number.isFinite(grossNum) || grossNum <= 0) return 0;
+  if (!Number.isFinite(rateNum) || rateNum <= 0) return 0;
+
+  const multiplier = 1 + rateNum / 100;
+  return grossNum - grossNum / multiplier;
+}
+
 // ===== STAFF ORDERS SORT/FILTER =====
 const sortedOrders = useMemo(() => {
   return [...orders].sort((a, b) => {
@@ -1980,6 +2003,7 @@ if (itemDrs > 0) {
 
   const receiptSubtotal = Number(order.subtotal ?? 0);
 const receiptDrsTotal = Number(order.drsTotal ?? 0);
+const receiptVatIncluded = Number(order.vatIncludedTotal ?? 0);
 const receiptTotal = Number(order.total ?? 0);
 
 lines.push("------------------------------------");
@@ -1987,6 +2011,10 @@ lines.push(formatLine("SUBTOTAL", `EUR ${receiptSubtotal.toFixed(2)}`, RECEIPT_W
 
 if (receiptDrsTotal > 0) {
   lines.push(formatLine("DRS", `EUR ${receiptDrsTotal.toFixed(2)}`, RECEIPT_WIDTH));
+}
+
+if (receiptVatIncluded > 0) {
+  lines.push(formatLine("VAT included", `EUR ${receiptVatIncluded.toFixed(2)}`, RECEIPT_WIDTH));
 }
 
 lines.push(
@@ -2312,6 +2340,7 @@ const itemsToAdd = (o.items || []).map((it) => ({
   productId: it.productId || null,
   name: it.name,
   price: Number(it.price || 0),
+  vatRate: Number(it.vatRate || 0),
   drsDeposit: Number(it.drsDeposit || 0),
   selections: it.selections || {},
   selectionLabels: it.selectionLabels || {},
@@ -3147,6 +3176,19 @@ size="small" />
             </Box>
           </CardContent>
         </Card>
+
+<TextField
+  select
+  label="VAT"
+  value={newVatRate}
+  onChange={(e) => setNewVatRate(e.target.value)}
+  size="small"
+  sx={{ width: 140 }}
+>
+  <MenuItem value="0">VAT 0%</MenuItem>
+  <MenuItem value="13.5">VAT 13.5%</MenuItem>
+  <MenuItem value="23">VAT 23%</MenuItem>
+</TextField>
 
 {adminCategoryTab === "drinks" && (
   <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
