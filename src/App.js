@@ -501,7 +501,7 @@ function exportCSV() {
 const rows = [];
 
 // Header "report"
-rows.push(["REPORT"]);
+rows.push(["SALES REPORT"]);
 rows.push(["From", fromDate, "To", toDate]);
 rows.push(["Orders", String(totalOrders), "Revenue", String(Number(totalRevenue || 0).toFixed(2))]);
 rows.push([]);
@@ -658,7 +658,7 @@ Reports
 </Typography>
 
 <Typography sx={{ opacity: 0.7, mb: 2 }}>
-Showing: <b>{fromDate}</b> → <b>{toDate}</b>
+Showing data from <b>{fromDate}</b> to <b>{toDate}</b>
 </Typography>
 
 
@@ -743,7 +743,7 @@ Export PDF
 </Typography>
 </Paper>
 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, minWidth: 220 }}>
-<Typography sx={{ opacity: 0.7 }}>Avg order</Typography>
+<Typography sx={{ opacity: 0.7 }}>Average order</Typography>
 <Typography sx={{ fontWeight: 900, fontSize: 28 }}>
 {formatEUR(avgOrder)}
 </Typography>
@@ -751,7 +751,7 @@ Export PDF
 
 
 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, minWidth: 260 }}>
-<Typography sx={{ opacity: 0.7, mb: 1 }}>By status</Typography>
+<Typography sx={{ opacity: 0.7, mb: 1 }}>Orders by status</Typography>
 <Stack direction="row" spacing={1} flexWrap="wrap">
 <Chip label={`New: ${statusCount[STATUS.NEW]}`} />
 <Chip label={`In progress: ${statusCount[STATUS.IN_PROGRESS]}`} />
@@ -765,7 +765,7 @@ Export PDF
 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
 <Typography sx={{ fontWeight: 900, mb: 1 }}>Top products</Typography>
 {topProducts.length === 0 ? (
-<Typography sx={{ opacity: 0.7 }}>No data in selected range.</Typography>
+<Typography sx={{ opacity: 0.7 }}>No data for the selected date range.</Typography>
 ) : (
 <Stack spacing={0.75}>
 {topProducts.map(([name, qty]) => (
@@ -783,7 +783,7 @@ Export PDF
 
 <Grid item xs={12} md={6}>
 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-<Typography sx={{ fontWeight: 900, mb: 1 }}>Top pickup slots</Typography>
+<Typography sx={{ fontWeight: 900, mb: 1 }}>Most popular pickup slots</Typography>
 {topSlots.length === 0 ? (
 <Typography sx={{ opacity: 0.7 }}>No data in selected range.</Typography>
 ) : (
@@ -1106,7 +1106,7 @@ function addToCart(item) {
 
 
 setCart((prev) => [...prev, item]);
-setSnack({ open: true, msg: "Added to cart" });
+setSnack({ open: true, msg: "Items added to cart" });
 }
 
 
@@ -1174,7 +1174,7 @@ const existing = orders.filter(
 );
 
 if (existing.length >= SLOT_LIMIT) {
-alert("Slot full, choose another time");
+alert("This pickup slot is full. Please choose another time.");
 return;
 }
 const orderRef = await addDoc(collection(db, "orders"), newOrder);
@@ -1221,10 +1221,10 @@ e.preventDefault();
 const name = newName.trim();
 const price = Number(newPrice);
 
-if (!name) return alert("Scrie numele produsului");
+if (!name) return alert("Please enter the product name");
 if (!Number.isFinite(price) || price <= 0) return alert("Pret invalid");
 if (newCategory === "drinks" && newDrsDeposit === "") {
-  return alert("Selectează DRS pentru băutură");
+  return alert("Please select a DRS option for this drink");
 }
 
 await addDoc(collection(db, "products"), {
@@ -1253,12 +1253,12 @@ await updateDoc(doc(db, "products", product.id), { active: nextActive });
 
 async function updateProductPrice(product, priceStr) {
 const price = Number(priceStr);
-if (!Number.isFinite(price) || price <= 0) return alert("Pret invalid");
+if (!Number.isFinite(price) || price <= 0) return alert("Invalid price");
 await updateDoc(doc(db, "products", product.id), { price });
 }
 
 async function removeProduct(product) {
-if (!window.confirm(`Stergi produsul "${product.name}"?`)) return;
+if (!window.confirm(`Delete product "${product.name}"?`)) return;
 await deleteDoc(doc(db, "products", product.id));
 }
 function openEditConfig(p) {
@@ -1956,7 +1956,7 @@ function buildReceiptText(order) {
     const baseName = String(item.name || "Item").trim();
     const nameWithQty = quantity > 1 ? `${baseName} x${quantity}` : baseName;
 
-    const lineTotal = Number((Number(item.price || 0) * quantity).toFixed(2)).toFixed(2);
+    const lineTotal = `€${Number((Number(item.price || 0) * quantity).toFixed(2)).toFixed(2)}`;
 
     lines.push(`[[BOLD]]${formatLine(nameWithQty, lineTotal, RECEIPT_WIDTH)}[[/BOLD]]`);
 
@@ -1973,7 +1973,7 @@ function buildReceiptText(order) {
     });
 const itemDrs = Number(item.drsDeposit || 0) * quantity;
 if (itemDrs > 0) {
-  lines.push(`  DRS: ${itemDrs.toFixed(2)}`);
+  lines.push(`  DRS: €${itemDrs.toFixed(2)}`);
 }
     lines.push("");
   });
@@ -1983,14 +1983,14 @@ const receiptDrsTotal = Number(order.drsTotal ?? 0);
 const receiptTotal = Number(order.total ?? 0);
 
 lines.push("------------------------------------");
-lines.push(formatLine("SUBTOTAL", receiptSubtotal.toFixed(2), RECEIPT_WIDTH));
+lines.push(formatLine("SUBTOTAL", `€${receiptSubtotal.toFixed(2)}`, RECEIPT_WIDTH));
 
 if (receiptDrsTotal > 0) {
-  lines.push(formatLine("DRS", receiptDrsTotal.toFixed(2), RECEIPT_WIDTH));
+  lines.push(formatLine("DRS", `€${receiptDrsTotal.toFixed(2)}`, RECEIPT_WIDTH));
 }
 
 lines.push(
-  `[[BOLD]]${formatLine("TOTAL", receiptTotal.toFixed(2), RECEIPT_WIDTH)}[[/BOLD]]`
+  `[[BOLD]]${formatLine("TOTAL", `€${receiptTotal.toFixed(2)}`, RECEIPT_WIDTH)}[[/BOLD]]`
 );
 
   return lines.join("\n");
@@ -2042,7 +2042,7 @@ Logout
 
 {isStaff && (
 <Button color="inherit" href="/">
-Back to Client
+Back to customer view
 </Button>
 )}
 {isStaff && staffAllowed && (
@@ -2099,11 +2099,11 @@ Staff access requires login.
 Menu
 </Typography>
 <Typography sx={{ opacity: 0.75, mb: 2 }}>
-Tap an item to add it. Some items can be customized.
+Tap an item to add it to your cart. Some items can be customized.
 </Typography>
 {!isOpen && (
 <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
-We are closed now. Orders available daily between <b>07:00</b> – <b>17:00</b>.
+We are currently closed. Orders can be placed daily between <b>07:00</b> and <b>17:00</b>.
 </Alert>
 )}
 {codeToShow && (
@@ -2126,7 +2126,7 @@ Order code: <span style={{ letterSpacing: 2, fontSize: 18 }}>
 </span>
 </Typography>
 <Typography variant="body2" sx={{ opacity: 0.75 }}>
-Keep this code to track your order status.
+Use this code to track your order status.
 </Typography>
 </Box>
 
@@ -2168,7 +2168,7 @@ gap: 1.5
 >
 <Box>
 <Typography sx={{ fontWeight: 900 }}>
-Recent orders
+Saved order
 </Typography>
 <Typography variant="body2" sx={{ opacity: 0.75 }}>
 {orderHistory.length} saved order{orderHistory.length === 1 ? "" : "s"}
@@ -2181,7 +2181,7 @@ variant="outlined"
 sx={{ fontWeight: 900, borderRadius: 999 }}
 onClick={() => setHistoryDrawerOpen(true)}
 >
-View
+Open
 </Button>
 </Paper>
 )}
@@ -2296,7 +2296,7 @@ sx={{ fontWeight: 900 }}
 onClick={() => {
 setOrderCode(o.code);
 localStorage.setItem("lastOrderCode", o.code);
-setSnack({ open: true, msg: `Tracking ${o.code}` });
+setSnack({ open: true, msg: `Tracking order ${o.code}` });
 setHistoryDrawerOpen(false);
 } }
 >
@@ -2339,7 +2339,7 @@ setHistorySelected(o);
 setHistoryOpen(true);
 } }
 >
-Details
+Order details
 </Button>
 </Stack>
 </Stack>
@@ -2504,7 +2504,7 @@ zIndex: (theme) => theme.zIndex.modal - 1
 <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
 <Box>
 <Typography sx={{ fontWeight: 900, lineHeight: 1.1 }}>
-Cart • {cart.length} item{cart.length === 1 ? "" : "s"}
+Your cart • {cart.length} product{cart.length === 1 ? "" : "s"}
 </Typography>
 <Typography variant="body2" sx={{ opacity: 0.75 }}>
 Total: {formatEUR(total)}
@@ -2516,7 +2516,7 @@ variant="contained"
 sx={{ borderRadius: 999, fontWeight: 900, px: 2.2 }}
 onClick={() => setCartOpen(true)}
 >
-Checkout
+Open cart
 </Button>
 </Stack>
 </Paper>
@@ -2767,7 +2767,7 @@ await placeOrder();
 setCartOpen(false);
 } }
 >
-Pay & Place order
+Place order
 </Button>
 
 {cart.length === 0 && (
@@ -2856,7 +2856,7 @@ size="small" />
               onChange={(e) => setShowOnlyOpen(e.target.checked)}
             />
           }
-          label="Only open orders"
+          label="Show only open orders"
         />
       )}
     </Stack>
@@ -2866,7 +2866,7 @@ size="small" />
     {staffTab === "orders" && (
       <Box>
         <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
-          Orders (live)
+          Live orders
         </Typography>
 
         {staffOrders.length === 0 && (
@@ -3096,7 +3096,7 @@ size="small" />
     {staffTab === "products" && isAdminRole && (
       <Box>
         <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
-          Products (Admin)
+          Product management
         </Typography>
 <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
   {CATEGORIES.map((c) => (
@@ -3304,7 +3304,7 @@ size="small" />
 {/* EDIT CONFIG DIALOG */}
 <Dialog open={editOpen} onClose={() => setEditOpen(false)} fullWidth maxWidth="sm">
 <DialogTitle sx={{ fontWeight: 900 }}>
-Edit config: {editProduct?.name || ""}
+Edit product configuration: {editProduct?.name || ""}
 </DialogTitle>
 
 <DialogContent dividers>
@@ -3712,7 +3712,7 @@ setHistoryOpen(false);
 setSnack({ open: true, msg: `Tracking ${historySelected.code}` });
 }}
 >
-Track
+Track order
 </Button>
 )}
 </DialogActions>
