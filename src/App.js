@@ -1956,7 +1956,7 @@ function buildReceiptText(order) {
     const baseName = String(item.name || "Item").trim();
     const nameWithQty = quantity > 1 ? `${baseName} x${quantity}` : baseName;
 
-    const lineTotal = `€${Number((Number(item.price || 0) * quantity).toFixed(2)).toFixed(2)}`;
+    const lineTotal = `EUR ${Number((Number(item.price || 0) * quantity).toFixed(2)).toFixed(2)}`;
 
     lines.push(`[[BOLD]]${formatLine(nameWithQty, lineTotal, RECEIPT_WIDTH)}[[/BOLD]]`);
 
@@ -1973,7 +1973,7 @@ function buildReceiptText(order) {
     });
 const itemDrs = Number(item.drsDeposit || 0) * quantity;
 if (itemDrs > 0) {
-  lines.push(`  DRS: €${itemDrs.toFixed(2)}`);
+  lines.push(`  DRS: EUR ${itemDrs.toFixed(2)}`);
 }
     lines.push("");
   });
@@ -1983,14 +1983,14 @@ const receiptDrsTotal = Number(order.drsTotal ?? 0);
 const receiptTotal = Number(order.total ?? 0);
 
 lines.push("------------------------------------");
-lines.push(formatLine("SUBTOTAL", `€${receiptSubtotal.toFixed(2)}`, RECEIPT_WIDTH));
+lines.push(formatLine("SUBTOTAL", `EUR ${receiptSubtotal.toFixed(2)}`, RECEIPT_WIDTH));
 
 if (receiptDrsTotal > 0) {
-  lines.push(formatLine("DRS", `€${receiptDrsTotal.toFixed(2)}`, RECEIPT_WIDTH));
+  lines.push(formatLine("DRS", `EUR ${receiptDrsTotal.toFixed(2)}`, RECEIPT_WIDTH));
 }
 
 lines.push(
-  `[[BOLD]]${formatLine("TOTAL", `€${receiptTotal.toFixed(2)}`, RECEIPT_WIDTH)}[[/BOLD]]`
+  `[[BOLD]]${formatLine("TOTAL", `EUR ${receiptTotal.toFixed(2)}`, RECEIPT_WIDTH)}[[/BOLD]]`
 );
 
   return lines.join("\n");
